@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ff7aa8" />
+    <meta name="description" content="Una piccola app offline per disegnare nel browser." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>Vicky Draw</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Vicky Draw</h1>
+          <p id="saveStatus">Pronta per disegnare</p>
+        </div>
+        <button class="ghost-button" id="installButton" type="button" hidden>Installa</button>
+      </header>
+
+      <main class="drawing-stage" aria-label="Area di disegno">
+        <canvas id="drawingCanvas"></canvas>
+      </main>
+
+      <nav class="toolbar" aria-label="Strumenti">
+        <div class="tool-group">
+          <button class="tool-button is-active" id="brushButton" type="button" aria-pressed="true">Penna</button>
+          <button class="tool-button" id="eraserButton" type="button" aria-pressed="false">Gomma</button>
+        </div>
+
+        <label class="color-control" aria-label="Colore">
+          <input id="colorPicker" type="color" value="#4738ff" />
+        </label>
+
+        <label class="size-control">
+          <span>Tratto</span>
+          <input id="sizePicker" type="range" min="2" max="44" value="12" />
+        </label>
+
+        <div class="tool-group">
+          <button class="icon-button" id="undoButton" type="button" title="Annulla" aria-label="Annulla">↶</button>
+          <button class="icon-button" id="redoButton" type="button" title="Ripristina" aria-label="Ripristina">↷</button>
+        </div>
+
+        <div class="tool-group">
+          <button class="tool-button" id="saveButton" type="button">Salva</button>
+          <button class="tool-button" id="galleryButton" type="button">Galleria</button>
+          <button class="tool-button" id="exportButton" type="button">PNG</button>
+          <button class="danger-button" id="clearButton" type="button">Pulisci</button>
+        </div>
+      </nav>
+    </div>
+
+    <dialog id="galleryDialog" class="gallery-dialog">
+      <form method="dialog" class="dialog-header">
+        <h2>Galleria</h2>
+        <button class="icon-button" type="submit" aria-label="Chiudi">×</button>
+      </form>
+      <div id="galleryGrid" class="gallery-grid"></div>
+      <p id="emptyGallery" class="empty-state">Non ci sono ancora disegni salvati.</p>
+    </dialog>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

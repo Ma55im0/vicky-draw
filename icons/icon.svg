@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>Vicky Draw</title>
+  <rect width="512" height="512" rx="96" fill="#ff7aa8"/>
+  <circle cx="382" cy="132" r="54" fill="#fff1f7"/>
+  <path d="M124 346c48-112 104-150 169-110 31 19 61 22 95 4" fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round"/>
+  <path d="M118 350c39-79 84-126 135-139" fill="none" stroke="#4738ff" stroke-width="24" stroke-linecap="round"/>
+  <path d="M150 378l-54 28 19-58 194-194 36 36-195 188z" fill="#fff7fb"/>
+  <path d="M309 154l29-29c12-12 31-12 43 0l7 7c12 12 12 31 0 43l-29 29-50-50z" fill="#222031"/>
+  <path d="M96 406l54-28-35-30-19 58z" fill="#222031"/>
+</svg>
