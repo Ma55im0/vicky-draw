@@ -20,14 +20,18 @@
         <button class="ghost-button" id="installButton" type="button" hidden>Installa</button>
       </header>
 
-      <main class="drawing-stage" aria-label="Area di disegno">
-        <canvas id="drawingCanvas"></canvas>
+      <main class="drawing-stage" id="drawingStage" aria-label="Area di disegno">
+        <div class="board" id="board">
+          <canvas id="drawingCanvas"></canvas>
+          <div class="sticker-layer" id="stickerLayer" aria-label="Sticker sul disegno"></div>
+        </div>
       </main>
 
       <nav class="toolbar" aria-label="Strumenti">
         <div class="tool-group">
           <button class="tool-button is-active" id="brushButton" type="button" aria-pressed="true">Penna</button>
           <button class="tool-button" id="eraserButton" type="button" aria-pressed="false">Gomma</button>
+          <button class="tool-button" id="handButton" type="button" aria-pressed="false">Sposta</button>
         </div>
 
         <label class="color-control" aria-label="Colore">
@@ -38,6 +42,16 @@
           <span>Tratto</span>
           <input id="sizePicker" type="range" min="2" max="44" value="12" />
         </label>
+
+        <div class="tool-group">
+          <button class="tool-button" id="assetsButton" type="button">Sticker/Sfondi</button>
+        </div>
+
+        <div class="tool-group zoom-controls" aria-label="Zoom">
+          <button class="icon-button" id="zoomOutButton" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+          <button class="tool-button zoom-label" id="zoomResetButton" type="button" title="Reimposta zoom">100%</button>
+          <button class="icon-button" id="zoomInButton" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+        </div>
 
         <div class="tool-group">
           <button class="icon-button" id="undoButton" type="button" title="Annulla" aria-label="Annulla">↶</button>
@@ -52,6 +66,25 @@
         </div>
       </nav>
     </div>
+
+    <dialog id="assetsDialog" class="asset-dialog">
+      <form method="dialog" class="dialog-header">
+        <h2>Sticker e sfondi</h2>
+        <button class="icon-button" type="submit" aria-label="Chiudi">×</button>
+      </form>
+      <div class="asset-panel-body">
+        <div class="asset-tabs" role="tablist" aria-label="Tipo elemento">
+          <button class="tool-button is-active" id="stickersTab" type="button" role="tab" aria-selected="true">Sticker</button>
+          <button class="tool-button" id="backgroundsTab" type="button" role="tab" aria-selected="false">Sfondi</button>
+        </div>
+        <label class="search-control">
+          <span>Cerca</span>
+          <input id="assetSearch" type="search" placeholder="es. cuore, gatto, cielo, calcio..." autocomplete="off" />
+        </label>
+        <div id="assetGrid" class="asset-grid"></div>
+        <p id="emptyAssets" class="empty-state" hidden>Nessun elemento trovato.</p>
+      </div>
+    </dialog>
 
     <dialog id="galleryDialog" class="gallery-dialog">
       <form method="dialog" class="dialog-header">

@@ -72,20 +72,93 @@ input {
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
-  background:
-    linear-gradient(90deg, rgba(245, 224, 236, 0.55) 1px, transparent 1px),
-    linear-gradient(rgba(245, 224, 236, 0.55) 1px, transparent 1px),
-    #ffffff;
-  background-size: 24px 24px;
+  background: rgba(255, 255, 255, 0.72);
   box-shadow: var(--shadow);
+  touch-action: none;
+}
+
+.board {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #ffffff;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+#drawingCanvas,
+.sticker-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 #drawingCanvas {
   display: block;
-  width: 100%;
-  height: 100%;
   cursor: crosshair;
   touch-action: none;
+}
+
+.board.is-hand-mode #drawingCanvas {
+  cursor: grab;
+}
+
+.board.is-hand-mode #drawingCanvas:active {
+  cursor: grabbing;
+}
+
+.sticker-layer {
+  pointer-events: none;
+  z-index: 2;
+}
+
+.sticker-item {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  min-height: 26px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+  pointer-events: auto;
+  filter: drop-shadow(0 4px 7px rgba(35, 27, 42, 0.16));
+}
+
+.sticker-item.is-selected {
+  outline: 2px dashed rgba(71, 56, 255, 0.85);
+  outline-offset: 7px;
+  border-radius: 12px;
+}
+
+.sticker-glyph {
+  display: block;
+  pointer-events: none;
+}
+
+.sticker-resize {
+  position: absolute;
+  right: -17px;
+  bottom: -17px;
+  display: none;
+  width: 28px;
+  height: 28px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #ffffff;
+  cursor: nwse-resize;
+  box-shadow: 0 5px 12px rgba(35, 27, 42, 0.28);
+  touch-action: none;
+}
+
+.sticker-item.is-selected .sticker-resize {
+  display: grid;
+  place-items: center;
 }
 
 .toolbar {
@@ -139,6 +212,12 @@ input {
   font-weight: 700;
 }
 
+.tool-button:disabled,
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .ghost-button {
   color: #8d174d;
   background: #ffe4ef;
@@ -155,6 +234,11 @@ input {
   padding: 0 10px;
   font-size: 1.35rem;
   line-height: 1;
+}
+
+.zoom-label {
+  min-width: 68px;
+  padding-inline: 10px;
 }
 
 .color-control {
@@ -192,7 +276,8 @@ input {
   accent-color: var(--accent-strong);
 }
 
-.gallery-dialog {
+.gallery-dialog,
+.asset-dialog {
   width: min(760px, calc(100vw - 24px));
   max-height: min(720px, calc(100dvh - 24px));
   border: 1px solid var(--line);
@@ -203,7 +288,8 @@ input {
   box-shadow: var(--shadow);
 }
 
-.gallery-dialog::backdrop {
+.gallery-dialog::backdrop,
+.asset-dialog::backdrop {
   background: rgba(35, 27, 42, 0.42);
 }
 
@@ -223,6 +309,79 @@ input {
 .dialog-header h2 {
   margin: 0;
   font-size: 1.2rem;
+}
+
+.asset-panel-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.asset-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.search-control {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.search-control input {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  outline: none;
+}
+
+.search-control input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 122, 168, 0.2);
+}
+
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+}
+
+.asset-card {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 94px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffafc;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.asset-card:hover,
+.asset-card:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.asset-card strong {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.asset-preview-sticker {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.asset-preview-bg {
+  width: 100%;
+  height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
 .gallery-grid {
@@ -298,5 +457,9 @@ input {
   .ghost-button,
   .icon-button {
     min-height: 48px;
+  }
+
+  .asset-grid {
+    grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
   }
 }
