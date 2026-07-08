@@ -41,3 +41,9 @@ Poi visita:
 http://localhost:5173
 ```
 
+
+
+## v5
+- Ricerca tema tramite API Vercel
+- Safety check lato server
+- Creazione dinamica di pack sticker/sfondi

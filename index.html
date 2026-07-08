@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ff7aa8" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://ma55im0.github.io data: blob:; connect-src 'self' https://ma55im0.github.io; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://ma55im0.github.io data: blob:; connect-src 'self' https://ma55im0.github.io https://vicky-draw-api.vercel.app; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests" />
     <meta name="description" content="Una piccola app offline per disegnare nel browser, con sticker e sfondi aggiornabili da una libreria curata." />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
@@ -82,8 +82,18 @@
           <button class="tool-button is-active" id="stickersTab" type="button" role="tab" aria-selected="true">Sticker</button>
           <button class="tool-button" id="backgroundsTab" type="button" role="tab" aria-selected="false">Sfondi</button>
         </div>
+        <div class="generate-panel">
+          <label class="search-control">
+            <span>Nuovo tema</span>
+            <div class="generate-row">
+              <input id="themeSearch" type="search" placeholder="es. unicorno, spazio, vampiro..." autocomplete="off" />
+              <button class="tool-button" id="generateThemeButton" type="button">Cerca nuovi</button>
+            </div>
+          </label>
+          <p id="generateStatus" class="generate-status">Scrivi un tema e l'app proverà a creare sticker e sfondi sicuri per bambini.</p>
+        </div>
         <label class="search-control">
-          <span>Cerca</span>
+          <span>Filtra libreria</span>
           <input id="assetSearch" type="search" placeholder="es. cuore, gatto, cielo, calcio..." autocomplete="off" />
         </label>
         <div class="library-row">

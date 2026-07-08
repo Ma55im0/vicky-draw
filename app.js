@@ -25,6 +25,9 @@ const saveStatus = document.querySelector("#saveStatus");
 
 const assetsDialog = document.querySelector("#assetsDialog");
 const assetSearch = document.querySelector("#assetSearch");
+const themeSearch = document.querySelector("#themeSearch");
+const generateThemeButton = document.querySelector("#generateThemeButton");
+const generateStatus = document.querySelector("#generateStatus");
 const stickersTab = document.querySelector("#stickersTab");
 const backgroundsTab = document.querySelector("#backgroundsTab");
 const assetGrid = document.querySelector("#assetGrid");
@@ -47,6 +50,7 @@ const STICKER_MAX_SIZE = 240;
 const ZOOM_STEP = 0.2;
 const EMOJI_FONT = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif";
 const REMOTE_LIBRARY_URL = "https://ma55im0.github.io/vicky-draw-library/library.json";
+const GENERATE_PACK_URL = "https://vicky-draw-api.vercel.app/api/generate-pack";
 const REMOTE_LIBRARY_CACHE_KEY = "vicky-draw-remote-library-v1";
 const REMOTE_LIBRARY_ORIGIN = new URL(REMOTE_LIBRARY_URL).origin;
 
@@ -1000,6 +1004,18 @@ function updateLibraryStatus(message) {
   }
 }
 
+function updateGenerateStatus(message, kind = "info") {
+  if (!generateStatus) {
+    return;
+  }
+  generateStatus.textContent = message;
+  generateStatus.dataset.kind = kind;
+}
+
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function makeRemoteAssetUrl(src) {
   if (!src || typeof src !== "string") {
     return null;
@@ -1063,6 +1079,10 @@ async function normalizeRemoteAsset(asset, kind) {
     tags: Array.isArray(asset.tags) ? asset.tags.map(String) : [],
     isRemote: true,
     source: "library",
+    pack: typeof asset.pack === "string" ? asset.pack : "",
+    generated: Boolean(asset.generated),
+    generatedFor: typeof asset.generatedFor === "string" ? asset.generatedFor : "",
+    safeTheme: typeof asset.safeTheme === "string" ? asset.safeTheme : "",
   };
 
   if (kind === "stickers") {
@@ -1170,6 +1190,84 @@ async function loadRemoteLibrary(options = {}) {
     } else {
       updateLibraryStatus("Libreria extra non ancora disponibile. Gli elementi base funzionano comunque.");
     }
+  }
+}
+
+async function refreshLibraryUntilPackVisible(packId, attempts = 5) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await loadRemoteLibrary({ force: true });
+    const found = remoteLibrary.stickers.some((item) => item.pack === packId) || remoteLibrary.backgrounds.some((item) => item.pack === packId);
+    if (found) {
+      return true;
+    }
+    if (attempt < attempts - 1) {
+      await wait(2500);
+    }
+  }
+  return false;
+}
+
+async function generateThemePack() {
+  const theme = themeSearch?.value?.trim() || "";
+
+  if (!theme) {
+    updateGenerateStatus("Scrivi prima un tema, per esempio unicorno, spazio o vampiro.", "warn");
+    themeSearch?.focus();
+    return;
+  }
+
+  generateThemeButton.disabled = true;
+  updateGenerateStatus(`Sto cercando nuovi sticker e sfondi per “${theme}”…`, "loading");
+
+  try {
+    const response = await fetch(GENERATE_PACK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data.ok === false) {
+      const reason = data.reason || data.message || data.error || "Non sono riuscita ad aggiornare la libreria.";
+      updateGenerateStatus(reason, "error");
+      window.alert(reason);
+      return;
+    }
+
+    if (data.status === "exists") {
+      await loadRemoteLibrary({ force: true });
+      assetSearch.value = theme;
+      setAssetKind("stickers");
+      renderAssetGrid();
+      updateGenerateStatus(`Tema già presente: ho filtrato la libreria su “${theme}”.`, "success");
+      setStatus(`Tema ${theme.toLowerCase()} già disponibile`);
+      return;
+    }
+
+    const transformedNote = data.softTransformed
+      ? ` Ho usato una versione più adatta ai bambini: “${data.safeTheme}”.`
+      : "";
+
+    updateGenerateStatus(`Pack creato! Aggiorno la libreria…${transformedNote}`, "loading");
+    const packVisible = data.packId ? await refreshLibraryUntilPackVisible(data.packId, 6) : await loadRemoteLibrary({ force: true }).then(() => true);
+
+    assetSearch.value = theme;
+    setAssetKind("stickers");
+    renderAssetGrid();
+
+    if (packVisible) {
+      updateGenerateStatus(`Tutto pronto! Nuovi sticker e sfondi per “${theme}” sono disponibili.${transformedNote}`, "success");
+      setStatus(`Nuovi elementi per ${theme.toLowerCase()} disponibili`);
+    } else {
+      updateGenerateStatus(`Pack creato. GitHub Pages potrebbe metterci ancora qualche secondo a mostrare tutto.${transformedNote}`, "warn");
+      setStatus(`Pack ${theme.toLowerCase()} creato`);
+    }
+  } catch (error) {
+    updateGenerateStatus("Errore durante la creazione del pack. Riprova tra poco.", "error");
+    window.alert(error?.message || "Errore durante la creazione del pack.");
+  } finally {
+    generateThemeButton.disabled = false;
   }
 }
 
@@ -2051,12 +2149,19 @@ assetsButton.addEventListener("click", () => {
   assetSearch.value = "";
   setAssetKind("stickers");
   assetsDialog.showModal();
-  window.setTimeout(() => assetSearch.focus(), 80);
+  window.setTimeout(() => themeSearch?.focus(), 80);
 });
 
 stickersTab.addEventListener("click", () => setAssetKind("stickers"));
 backgroundsTab.addEventListener("click", () => setAssetKind("backgrounds"));
 assetSearch.addEventListener("input", renderAssetGrid);
+generateThemeButton?.addEventListener("click", generateThemePack);
+themeSearch?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    generateThemePack();
+  }
+});
 refreshLibraryButton?.addEventListener("click", async () => {
   refreshLibraryButton.disabled = true;
   await loadRemoteLibrary({ force: true });
@@ -2109,6 +2214,7 @@ resizeCanvas();
 applyBackground("white", { pushToHistory: false, autosave: false });
 applyViewTransform();
 renderAssetGrid();
+updateGenerateStatus("Scrivi un tema e crea nuovi sticker e sfondi sicuri per bambini.");
 loadRemoteLibrary();
 loadAutosave();
 updateHistoryButtons();
