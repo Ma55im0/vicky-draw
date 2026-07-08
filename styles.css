@@ -632,3 +632,30 @@ input {
     width: 100%;
   }
 }
+
+
+.asset-card {
+  position: relative;
+}
+
+.asset-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(229, 72, 77, 0.28);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--danger);
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(73, 45, 80, 0.12);
+}
+
+.asset-delete:active {
+  transform: scale(0.94);
+}

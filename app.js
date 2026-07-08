@@ -51,6 +51,7 @@ const ZOOM_STEP = 0.2;
 const EMOJI_FONT = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif";
 const REMOTE_LIBRARY_URL = "https://ma55im0.github.io/vicky-draw-library/library.json";
 const GENERATE_PACK_URL = "https://vicky-draw-api.vercel.app/api/generate-pack";
+const DELETE_PACK_URL = "https://vicky-draw-api.vercel.app/api/delete-pack";
 const REMOTE_LIBRARY_CACHE_KEY = "vicky-draw-remote-library-v1";
 const REMOTE_LIBRARY_ORIGIN = new URL(REMOTE_LIBRARY_URL).origin;
 
@@ -1207,6 +1208,45 @@ async function refreshLibraryUntilPackVisible(packId, attempts = 5) {
   return false;
 }
 
+
+async function deleteRemotePack(packId, label = "questo pack") {
+  if (!packId) {
+    return;
+  }
+
+  const confirmed = window.confirm(`Vuoi eliminare ${label} dalla libreria?`);
+  if (!confirmed) {
+    return;
+  }
+
+  updateGenerateStatus(`Elimino ${label}…`, "loading");
+
+  try {
+    const response = await fetch(DELETE_PACK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packId }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok === false) {
+      const reason = data.reason || data.message || data.error || "Non sono riuscita a eliminare il pack.";
+      updateGenerateStatus(reason, "error");
+      window.alert(reason);
+      return;
+    }
+
+    updateGenerateStatus(`${label} eliminato. Aggiorno la libreria…`, "success");
+    assetSearch.value = "";
+    await loadRemoteLibrary({ force: true });
+    renderAssetGrid();
+    setStatus(`${label} eliminato`);
+  } catch (error) {
+    updateGenerateStatus("Errore durante l'eliminazione del pack. Riprova tra poco.", "error");
+    window.alert(error?.message || "Errore durante l'eliminazione del pack.");
+  }
+}
+
 async function generateThemePack() {
   const theme = themeSearch?.value?.trim() || "";
 
@@ -1217,7 +1257,7 @@ async function generateThemePack() {
   }
 
   generateThemeButton.disabled = true;
-  updateGenerateStatus(`Sto cercando nuovi sticker e sfondi per “${theme}”…`, "loading");
+  updateGenerateStatus(`Cerco sticker online sicuri per “${theme}”…`, "loading");
 
   try {
     const response = await fetch(GENERATE_PACK_URL, {
@@ -1249,7 +1289,7 @@ async function generateThemePack() {
       ? ` Ho usato una versione più adatta ai bambini: “${data.safeTheme}”.`
       : "";
 
-    updateGenerateStatus(`Pack creato! Aggiorno la libreria…${transformedNote}`, "loading");
+    updateGenerateStatus(`Pack importato! Aggiorno la libreria…${transformedNote}`, "loading");
     const packVisible = data.packId ? await refreshLibraryUntilPackVisible(data.packId, 6) : await loadRemoteLibrary({ force: true }).then(() => true);
 
     assetSearch.value = theme;
@@ -1257,10 +1297,10 @@ async function generateThemePack() {
     renderAssetGrid();
 
     if (packVisible) {
-      updateGenerateStatus(`Tutto pronto! Nuovi sticker e sfondi per “${theme}” sono disponibili.${transformedNote}`, "success");
+      updateGenerateStatus(`Tutto pronto! I nuovi sticker per “${theme}” sono disponibili.${transformedNote}`, "success");
       setStatus(`Nuovi elementi per ${theme.toLowerCase()} disponibili`);
     } else {
-      updateGenerateStatus(`Pack creato. GitHub Pages potrebbe metterci ancora qualche secondo a mostrare tutto.${transformedNote}`, "warn");
+      updateGenerateStatus(`Pack importato. GitHub Pages potrebbe metterci ancora qualche secondo a mostrare tutto.${transformedNote}`, "warn");
       setStatus(`Pack ${theme.toLowerCase()} creato`);
     }
   } catch (error) {
@@ -1847,6 +1887,21 @@ function renderAssetGrid() {
         badge.className = "asset-badge";
         badge.textContent = "Extra";
         button.append(badge);
+
+        if (record.pack) {
+          const deleteButton = document.createElement("span");
+          deleteButton.className = "asset-delete";
+          deleteButton.title = "Elimina questo pack dalla libreria";
+          deleteButton.setAttribute("role", "button");
+          deleteButton.setAttribute("aria-label", `Elimina ${getAssetName(record)}`);
+          deleteButton.textContent = "×";
+          deleteButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            deleteRemotePack(record.pack, `il pack ${record.generatedFor || getAssetName(record)}`);
+          });
+          button.append(deleteButton);
+        }
       }
 
       button.addEventListener("click", () => addSticker(record));
@@ -1868,6 +1923,21 @@ function renderAssetGrid() {
         badge.className = "asset-badge";
         badge.textContent = "Extra";
         button.append(badge);
+
+        if (record.pack) {
+          const deleteButton = document.createElement("span");
+          deleteButton.className = "asset-delete";
+          deleteButton.title = "Elimina questo pack dalla libreria";
+          deleteButton.setAttribute("role", "button");
+          deleteButton.setAttribute("aria-label", `Elimina ${getAssetName(record)}`);
+          deleteButton.textContent = "×";
+          deleteButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            deleteRemotePack(record.pack, `il pack ${record.generatedFor || getAssetName(record)}`);
+          });
+          button.append(deleteButton);
+        }
       }
 
       button.addEventListener("click", () => {
@@ -2214,7 +2284,7 @@ resizeCanvas();
 applyBackground("white", { pushToHistory: false, autosave: false });
 applyViewTransform();
 renderAssetGrid();
-updateGenerateStatus("Scrivi un tema e crea nuovi sticker e sfondi sicuri per bambini.");
+updateGenerateStatus("Scrivi un tema e importa nuovi sticker da fonti controllate.");
 loadRemoteLibrary();
 loadAutosave();
 updateHistoryButtons();

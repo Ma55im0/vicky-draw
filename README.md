@@ -47,3 +47,8 @@ http://localhost:5173
 - Ricerca tema tramite API Vercel
 - Safety check lato server
 - Creazione dinamica di pack sticker/sfondi
+
+
+## v6
+- Adds delete controls for remote/imported packs.
+- Text updated for external provider import instead of procedural generation.

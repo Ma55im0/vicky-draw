@@ -1,4 +1,4 @@
-const CACHE_NAME = "vicky-draw-v5";
+const CACHE_NAME = "vicky-draw-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
