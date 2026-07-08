@@ -29,6 +29,8 @@ const stickersTab = document.querySelector("#stickersTab");
 const backgroundsTab = document.querySelector("#backgroundsTab");
 const assetGrid = document.querySelector("#assetGrid");
 const emptyAssets = document.querySelector("#emptyAssets");
+const libraryStatus = document.querySelector("#libraryStatus");
+const refreshLibraryButton = document.querySelector("#refreshLibraryButton");
 
 const galleryDialog = document.querySelector("#galleryDialog");
 const galleryGrid = document.querySelector("#galleryGrid");
@@ -44,6 +46,16 @@ const STICKER_MIN_SIZE = 24;
 const STICKER_MAX_SIZE = 240;
 const ZOOM_STEP = 0.2;
 const EMOJI_FONT = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif";
+const REMOTE_LIBRARY_URL = "https://ma55im0.github.io/vicky-draw-library/library.json";
+const REMOTE_LIBRARY_CACHE_KEY = "vicky-draw-remote-library-v1";
+const REMOTE_LIBRARY_ORIGIN = new URL(REMOTE_LIBRARY_URL).origin;
+
+let remoteLibrary = {
+  version: 0,
+  updatedAt: null,
+  stickers: [],
+  backgrounds: [],
+};
 
 const STICKERS = [
   {
@@ -702,7 +714,7 @@ function drawImageFromDataUrl(dataUrl) {
 
 function serializeProject() {
   return {
-    version: 2,
+    version: 3,
     backgroundId: currentBackgroundId,
     stickers: stickers.map((sticker) => ({ ...sticker })),
     drawingDataUrl: canvas.toDataURL("image/png"),
@@ -965,8 +977,204 @@ function endHandGesture(event) {
   }
 }
 
+function getAssetName(item) {
+  return item.name || item.title || item.id || "Elemento";
+}
+
+function getAssetKeywords(item) {
+  const tags = Array.isArray(item.tags) ? item.tags.join(" ") : "";
+  return `${item.keywords || ""} ${tags} ${item.category || ""}`.trim();
+}
+
+function getAllStickers() {
+  return [...STICKERS, ...remoteLibrary.stickers];
+}
+
+function getAllBackgrounds() {
+  return [...BACKGROUNDS, ...remoteLibrary.backgrounds];
+}
+
+function updateLibraryStatus(message) {
+  if (libraryStatus) {
+    libraryStatus.textContent = message;
+  }
+}
+
+function makeRemoteAssetUrl(src) {
+  if (!src || typeof src !== "string") {
+    return null;
+  }
+
+  if (src.startsWith("data:image/")) {
+    return src;
+  }
+
+  try {
+    const url = new URL(src, REMOTE_LIBRARY_URL);
+    if (url.protocol !== "https:" || url.origin !== REMOTE_LIBRARY_ORIGIN) {
+      return null;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchAsDataUrl(url) {
+  if (!url || url.startsWith("data:image/")) {
+    return url;
+  }
+
+  const response = await fetch(url, { cache: "no-cache" });
+  if (!response.ok) {
+    throw new Error(`Asset non disponibile: ${response.status}`);
+  }
+  return blobToDataUrl(await response.blob());
+}
+
+async function normalizeRemoteAsset(asset, kind) {
+  if (!asset || typeof asset !== "object") {
+    return null;
+  }
+
+  const id = String(asset.id || asset.name || asset.title || "").trim();
+  const name = String(asset.name || asset.title || id || "Elemento").trim();
+  if (!id || !name) {
+    return null;
+  }
+
+  const src = makeRemoteAssetUrl(asset.src);
+  const normalized = {
+    id: `remote:${id}`,
+    remoteId: id,
+    name,
+    title: name,
+    category: String(asset.category || "extra"),
+    keywords: getAssetKeywords(asset),
+    tags: Array.isArray(asset.tags) ? asset.tags.map(String) : [],
+    isRemote: true,
+    source: "library",
+  };
+
+  if (kind === "stickers") {
+    if (!src) {
+      return null;
+    }
+    normalized.type = "image";
+    normalized.src = src;
+    normalized.dataUrl = await fetchAsDataUrl(src).catch(() => null);
+    return normalized;
+  }
+
+  if (kind === "backgrounds") {
+    if (src) {
+      normalized.type = "image";
+      normalized.src = src;
+      normalized.dataUrl = await fetchAsDataUrl(src).catch(() => null);
+      return normalized;
+    }
+
+    if (typeof asset.css === "string" && asset.css.length <= 260) {
+      normalized.type = "css";
+      normalized.css = asset.css;
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+async function normalizeRemoteLibrary(rawLibrary) {
+  const rawStickers = Array.isArray(rawLibrary?.stickers) ? rawLibrary.stickers : [];
+  const rawBackgrounds = Array.isArray(rawLibrary?.backgrounds) ? rawLibrary.backgrounds : [];
+  const stickers = [];
+  const backgrounds = [];
+
+  for (const sticker of rawStickers.slice(0, 120)) {
+    const normalized = await normalizeRemoteAsset(sticker, "stickers");
+    if (normalized) {
+      stickers.push(normalized);
+    }
+  }
+
+  for (const background of rawBackgrounds.slice(0, 80)) {
+    const normalized = await normalizeRemoteAsset(background, "backgrounds");
+    if (normalized) {
+      backgrounds.push(normalized);
+    }
+  }
+
+  return {
+    version: Number(rawLibrary?.version) || 0,
+    updatedAt: String(rawLibrary?.updatedAt || ""),
+    stickers,
+    backgrounds,
+  };
+}
+
+function saveRemoteLibraryCache(library) {
+  try {
+    localStorage.setItem(REMOTE_LIBRARY_CACHE_KEY, JSON.stringify(library));
+  } catch {
+    // Se lo spazio locale è pieno, la libreria resta comunque disponibile online.
+  }
+}
+
+function readRemoteLibraryCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(REMOTE_LIBRARY_CACHE_KEY) || "null");
+    if (cached && Array.isArray(cached.stickers) && Array.isArray(cached.backgrounds)) {
+      return cached;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function loadRemoteLibrary(options = {}) {
+  const { force = false } = options;
+  const cached = readRemoteLibraryCache();
+
+  if (cached && !force) {
+    remoteLibrary = cached;
+    updateLibraryStatus(`Libreria extra pronta: ${cached.stickers.length} sticker, ${cached.backgrounds.length} sfondi.`);
+    renderAssetGrid();
+  }
+
+  try {
+    updateLibraryStatus(force ? "Aggiorno la libreria extra…" : "Controllo nuovi sticker e sfondi…");
+    const response = await fetch(`${REMOTE_LIBRARY_URL}?t=${Date.now()}`, { cache: "no-cache" });
+    if (!response.ok) {
+      throw new Error(`Libreria non disponibile: ${response.status}`);
+    }
+    const rawLibrary = await response.json();
+    remoteLibrary = await normalizeRemoteLibrary(rawLibrary);
+    saveRemoteLibraryCache(remoteLibrary);
+    updateLibraryStatus(`Libreria extra aggiornata: ${remoteLibrary.stickers.length} sticker, ${remoteLibrary.backgrounds.length} sfondi.`);
+    renderAssetGrid();
+  } catch {
+    if (cached) {
+      remoteLibrary = cached;
+      updateLibraryStatus(`Offline: uso la libreria salvata (${cached.stickers.length} sticker, ${cached.backgrounds.length} sfondi).`);
+      renderAssetGrid();
+    } else {
+      updateLibraryStatus("Libreria extra non ancora disponibile. Gli elementi base funzionano comunque.");
+    }
+  }
+}
+
 function getBackground(id) {
-  return BACKGROUNDS.find((background) => background.id === id) || BACKGROUNDS[0];
+  return getAllBackgrounds().find((background) => background.id === id) || BACKGROUNDS[0];
 }
 
 function applyBackground(id, options = {}) {
@@ -976,13 +1184,25 @@ function applyBackground(id, options = {}) {
     pushHistory();
   }
 
-  currentBackgroundId = getBackground(id).id;
-  board.style.background = getBackground(currentBackgroundId).css;
-  board.style.backgroundSize = currentBackgroundId === "grid" ? "24px 24px" : currentBackgroundId === "dots" ? "26px 26px" : "auto";
+  const background = getBackground(id);
+  currentBackgroundId = background.id;
+
+  if (background.src || background.dataUrl) {
+    const imageSource = background.dataUrl || background.src;
+    board.style.background = "#ffffff";
+    board.style.backgroundImage = `url("${imageSource}")`;
+    board.style.backgroundRepeat = "no-repeat";
+    board.style.backgroundPosition = "center";
+    board.style.backgroundSize = "cover";
+  } else {
+    board.style.backgroundImage = "";
+    board.style.background = background.css || "#ffffff";
+    board.style.backgroundSize = currentBackgroundId === "grid" ? "24px 24px" : currentBackgroundId === "dots" ? "26px 26px" : "auto";
+  }
 
   if (autosave) {
     scheduleAutosave();
-    setStatus(`Sfondo ${getBackground(currentBackgroundId).name.toLowerCase()} applicato`);
+    setStatus(`Sfondo ${getAssetName(background).toLowerCase()} applicato`);
   }
 }
 
@@ -1174,7 +1394,62 @@ function drawBackgroundOnContext(targetCtx, width, height, backgroundId) {
   targetCtx.restore();
 }
 
-function createCompositeDataUrl() {
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Immagine non caricata"));
+    if (!src.startsWith("data:image/")) {
+      image.crossOrigin = "anonymous";
+    }
+    image.src = src;
+  });
+}
+
+function drawImageCover(targetCtx, image, width, height) {
+  const sourceRatio = image.naturalWidth / image.naturalHeight || 1;
+  const targetRatio = width / height || 1;
+  let drawWidth = width;
+  let drawHeight = height;
+  let drawX = 0;
+  let drawY = 0;
+
+  if (sourceRatio > targetRatio) {
+    drawHeight = height;
+    drawWidth = height * sourceRatio;
+    drawX = (width - drawWidth) / 2;
+  } else {
+    drawWidth = width;
+    drawHeight = width / sourceRatio;
+    drawY = (height - drawHeight) / 2;
+  }
+
+  targetCtx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+}
+
+async function drawBackgroundOnContextAsync(targetCtx, width, height, backgroundId) {
+  const bg = getBackground(backgroundId);
+  const src = bg.dataUrl || bg.src;
+
+  if (src) {
+    targetCtx.save();
+    targetCtx.clearRect(0, 0, width, height);
+    targetCtx.fillStyle = "#ffffff";
+    targetCtx.fillRect(0, 0, width, height);
+    try {
+      const image = await loadImage(src);
+      drawImageCover(targetCtx, image, width, height);
+    } catch {
+      drawBackgroundOnContext(targetCtx, width, height, "white");
+    }
+    targetCtx.restore();
+    return;
+  }
+
+  drawBackgroundOnContext(targetCtx, width, height, backgroundId);
+}
+
+async function createCompositeDataUrl() {
   const output = document.createElement("canvas");
   output.width = canvas.width;
   output.height = canvas.height;
@@ -1183,7 +1458,7 @@ function createCompositeDataUrl() {
   const scaleX = output.width / size.width;
   const scaleY = output.height / size.height;
 
-  drawBackgroundOnContext(out, output.width, output.height, currentBackgroundId);
+  await drawBackgroundOnContextAsync(out, output.width, output.height, currentBackgroundId);
   out.drawImage(canvas, 0, 0, output.width, output.height);
 
   out.textAlign = "center";
@@ -1192,14 +1467,27 @@ function createCompositeDataUrl() {
     out.save();
     out.translate(sticker.x * scaleX, sticker.y * scaleY);
     out.rotate(((sticker.rotation || 0) * Math.PI) / 180);
-    out.font = `${sticker.size * scaleY}px ${EMOJI_FONT}`;
-    out.fillText(sticker.value, 0, 0);
+
+    if (sticker.type === "image" && (sticker.dataUrl || sticker.src)) {
+      try {
+        const image = await loadImage(sticker.dataUrl || sticker.src);
+        const stickerWidth = sticker.size * scaleX;
+        const ratio = image.naturalHeight && image.naturalWidth ? image.naturalHeight / image.naturalWidth : 1;
+        const stickerHeight = stickerWidth * ratio;
+        out.drawImage(image, -stickerWidth / 2, -stickerHeight / 2, stickerWidth, stickerHeight);
+      } catch {
+        // Se uno sticker remoto non è caricabile, viene semplicemente saltato nell'export.
+      }
+    } else {
+      out.font = `${sticker.size * scaleY}px ${EMOJI_FONT}`;
+      out.fillText(sticker.value, 0, 0);
+    }
+
     out.restore();
   }
 
   return output.toDataURL("image/png");
 }
-
 
 function updateStickerSelection() {
   for (const element of stickerLayer.querySelectorAll(".sticker-item")) {
@@ -1215,6 +1503,7 @@ function updateStickerElement(sticker) {
   element.style.left = `${sticker.x}px`;
   element.style.top = `${sticker.y}px`;
   element.style.fontSize = `${sticker.size}px`;
+  element.style.setProperty("--sticker-size", `${sticker.size}px`);
   element.style.transform = getStickerTransform(sticker);
   element.classList.toggle("is-selected", sticker.id === activeStickerId);
 }
@@ -1229,12 +1518,21 @@ function renderStickers() {
     element.style.left = `${sticker.x}px`;
     element.style.top = `${sticker.y}px`;
     element.style.fontSize = `${sticker.size}px`;
+    element.style.setProperty("--sticker-size", `${sticker.size}px`);
     element.style.transform = getStickerTransform(sticker);
     element.classList.toggle("is-selected", sticker.id === activeStickerId);
+    element.classList.toggle("is-image-sticker", sticker.type === "image");
 
     const glyph = document.createElement("span");
     glyph.className = "sticker-glyph";
-    glyph.textContent = sticker.value;
+    if (sticker.type === "image" && (sticker.dataUrl || sticker.src)) {
+      const image = document.createElement("img");
+      image.src = sticker.dataUrl || sticker.src;
+      image.alt = sticker.name || "Sticker";
+      glyph.append(image);
+    } else {
+      glyph.textContent = sticker.value;
+    }
 
     const resizeHandle = document.createElement("button");
     resizeHandle.type = "button";
@@ -1382,14 +1680,17 @@ function getVisibleBoardCenter() {
 function addSticker(stickerDefinition) {
   pushHistory();
   const center = getVisibleBoardCenter();
+  const isImageSticker = stickerDefinition.type === "image" || Boolean(stickerDefinition.src || stickerDefinition.dataUrl);
   const sticker = {
     id: createId("sticker"),
-    type: "emoji",
-    value: stickerDefinition.value,
-    name: stickerDefinition.name,
+    type: isImageSticker ? "image" : "emoji",
+    value: isImageSticker ? "" : stickerDefinition.value,
+    src: isImageSticker ? stickerDefinition.src : undefined,
+    dataUrl: isImageSticker ? stickerDefinition.dataUrl : undefined,
+    name: getAssetName(stickerDefinition),
     x: center.x,
     y: center.y,
-    size: 72,
+    size: isImageSticker ? 92 : 72,
     rotation: 0,
   };
   stickers.push(sticker);
@@ -1409,14 +1710,14 @@ function matchesQuery(item, query) {
   if (!normalizedQuery) {
     return true;
   }
-  const haystack = normalizeText(`${item.name} ${item.keywords || ""} ${item.value || ""}`);
+  const haystack = normalizeText(`${getAssetName(item)} ${getAssetKeywords(item)} ${item.value || ""}`);
   return normalizedQuery.split(/\s+/).every((word) => haystack.includes(word));
 }
 
 function renderAssetGrid() {
   assetGrid.innerHTML = "";
   const query = assetSearch.value;
-  const source = currentAssetKind === "stickers" ? STICKERS : BACKGROUNDS;
+  const source = currentAssetKind === "stickers" ? getAllStickers() : getAllBackgrounds();
   const records = source.filter((item) => matchesQuery(item, query));
   emptyAssets.hidden = records.length > 0;
 
@@ -1426,21 +1727,51 @@ function renderAssetGrid() {
     button.className = "asset-card";
 
     if (currentAssetKind === "stickers") {
-      const preview = document.createElement("span");
-      preview.className = "asset-preview-sticker";
-      preview.textContent = record.value;
+      if (record.type === "image" || record.src || record.dataUrl) {
+        const preview = document.createElement("img");
+        preview.className = "asset-preview-img";
+        preview.src = record.dataUrl || record.src;
+        preview.alt = getAssetName(record);
+        button.append(preview);
+      } else {
+        const preview = document.createElement("span");
+        preview.className = "asset-preview-sticker";
+        preview.textContent = record.value;
+        button.append(preview);
+      }
+
       const name = document.createElement("strong");
-      name.textContent = record.name;
-      button.append(preview, name);
+      name.textContent = getAssetName(record);
+      button.append(name);
+
+      if (record.isRemote) {
+        const badge = document.createElement("span");
+        badge.className = "asset-badge";
+        badge.textContent = "Extra";
+        button.append(badge);
+      }
+
       button.addEventListener("click", () => addSticker(record));
     } else {
       const preview = document.createElement("span");
       preview.className = "asset-preview-bg";
-      preview.style.background = record.css;
-      preview.style.backgroundSize = record.id === "grid" ? "24px 24px" : record.id === "dots" ? "26px 26px" : "auto";
+      if (record.src || record.dataUrl) {
+        preview.style.backgroundImage = `url("${record.dataUrl || record.src}")`;
+      } else {
+        preview.style.background = record.css;
+        preview.style.backgroundSize = record.id === "grid" ? "24px 24px" : record.id === "dots" ? "26px 26px" : "auto";
+      }
       const name = document.createElement("strong");
-      name.textContent = record.name;
+      name.textContent = getAssetName(record);
       button.append(preview, name);
+
+      if (record.isRemote) {
+        const badge = document.createElement("span");
+        badge.className = "asset-badge";
+        badge.textContent = "Extra";
+        button.append(badge);
+      }
+
       button.addEventListener("click", () => {
         applyBackground(record.id);
         assetsDialog.close();
@@ -1534,7 +1865,7 @@ function scheduleAutosave() {
       id: AUTOSAVE_ID,
       title: "Autosave",
       createdAt: new Date().toISOString(),
-      dataUrl: createCompositeDataUrl(),
+      dataUrl: await createCompositeDataUrl(),
       project: serializeProject(),
     });
     setStatus("Salvato automaticamente");
@@ -1567,7 +1898,7 @@ async function saveCurrentDrawing() {
       minute: "2-digit",
     })}`,
     createdAt: now.toISOString(),
-    dataUrl: createCompositeDataUrl(),
+    dataUrl: await createCompositeDataUrl(),
     project: serializeProject(),
   });
   setStatus("Disegno salvato in galleria");
@@ -1676,11 +2007,11 @@ function clearCanvas() {
   scheduleAutosave();
 }
 
-function exportPNG() {
+async function exportPNG() {
   const link = document.createElement("a");
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   link.download = `vicky-draw-${stamp}.png`;
-  link.href = createCompositeDataUrl();
+  link.href = await createCompositeDataUrl();
   link.click();
   setStatus("PNG esportato");
 }
@@ -1726,6 +2057,11 @@ assetsButton.addEventListener("click", () => {
 stickersTab.addEventListener("click", () => setAssetKind("stickers"));
 backgroundsTab.addEventListener("click", () => setAssetKind("backgrounds"));
 assetSearch.addEventListener("input", renderAssetGrid);
+refreshLibraryButton?.addEventListener("click", async () => {
+  refreshLibraryButton.disabled = true;
+  await loadRemoteLibrary({ force: true });
+  refreshLibraryButton.disabled = false;
+});
 
 zoomOutButton.addEventListener("click", () => setZoom(view.zoom - ZOOM_STEP));
 zoomInButton.addEventListener("click", () => setZoom(view.zoom + ZOOM_STEP));
@@ -1773,6 +2109,7 @@ resizeCanvas();
 applyBackground("white", { pushToHistory: false, autosave: false });
 applyViewTransform();
 renderAssetGrid();
+loadRemoteLibrary();
 loadAutosave();
 updateHistoryButtons();
 registerServiceWorker();

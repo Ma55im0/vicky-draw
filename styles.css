@@ -432,11 +432,68 @@ input {
   line-height: 1;
 }
 
+.asset-preview-img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 8px rgba(35, 27, 42, 0.14));
+}
+
 .asset-preview-bg {
   width: 100%;
   height: 48px;
   border: 1px solid var(--line);
   border-radius: 8px;
+  background-position: center;
+  background-size: cover;
+}
+
+.asset-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #eafbf4;
+  color: #237251;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.library-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px dashed rgba(255, 122, 168, 0.38);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fff7fb, #f2fbff);
+}
+
+.library-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.mini-button {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 0.82rem;
+}
+
+.sticker-item.is-image-sticker {
+  min-width: 34px;
+  min-height: 34px;
+}
+
+.sticker-glyph img {
+  display: block;
+  width: var(--sticker-size, 72px);
+  height: auto;
+  max-width: none;
+  pointer-events: none;
 }
 
 .gallery-grid {
@@ -516,5 +573,10 @@ input {
 
   .asset-grid {
     grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  }
+
+  .library-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

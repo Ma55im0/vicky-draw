@@ -1,34 +1,35 @@
-# Vicky Draw
+# Vicky Draw v4
 
 Piccola web app offline-first per disegnare nel browser, pensata per bambini e pubblicabile come sito statico.
 
-## Funzioni
+## Novità v4
 
-- Disegno con mouse, dito o penna.
-- Tratto continuo anche quando si disegna velocemente.
-- Colori, dimensione tratto e gomma.
-- Libreria ampliata di sticker ricercabili.
-- Sticker spostabili, ridimensionabili e ruotabili.
-- Sfondi ricercabili e applicabili al foglio.
-- Zoom in/out da 100% a 300%, reset zoom e modalità Sposta; su mobile in modalità Sposta funziona anche il pinch-to-zoom.
-- Undo e redo anche su sticker e sfondi.
-- Salvataggio automatico locale.
-- Galleria locale con apertura/eliminazione dei disegni.
-- Export PNG con disegno, sticker ruotati e sfondo.
-- PWA installabile e utilizzabile offline dopo il primo caricamento.
+- Lettura di una libreria remota controllata da `vicky-draw-library`.
+- Cache locale della libreria extra: dopo il primo caricamento, sticker e sfondi restano disponibili anche offline.
+- Sticker remoti in SVG spostabili, ridimensionabili e ruotabili.
+- Sfondi remoti applicabili al foglio ed esportabili nel PNG.
+- Bottone `Aggiorna libreria` nel pannello Sticker/Sfondi.
+
+## Libreria remota
+
+L'app legge:
+
+```txt
+https://ma55im0.github.io/vicky-draw-library/library.json
+```
+
+Per aggiungere contenuti nuovi, aggiorna il repository `vicky-draw-library`. Non è necessario ripubblicare l'app, salvo modifiche al codice.
 
 ## Privacy e sicurezza
 
 - Nessun login.
-- Nessuna API esterna.
 - Nessun tracciamento.
-- Nessuna chiave o token nel codice.
+- Nessuna ricerca libera su internet.
+- Nessuna API key nel browser.
+- La libreria mostra solo asset elencati nel tuo `library.json`.
 - I disegni restano nel browser del dispositivo tramite IndexedDB.
-- La pagina include una Content Security Policy via meta tag, utile come difesa aggiuntiva per una app statica su GitHub Pages.
 
 ## Uso locale
-
-Apri la cartella con un piccolo server statico. Esempio:
 
 ```bash
 python3 -m http.server 5173
@@ -40,6 +41,3 @@ Poi visita:
 http://localhost:5173
 ```
 
-## Pubblicazione
-
-Il progetto non richiede build. Puoi pubblicare direttamente questi file su GitHub Pages, Netlify o Vercel.

@@ -1,7 +1,7 @@
 {
   "name": "Vicky Draw",
   "short_name": "Vicky Draw",
-  "description": "Una piccola app colorata e offline per disegnare nel browser.",
+  "description": "App per disegnare con sticker, sfondi e libreria aggiornabile.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
