@@ -38,109 +38,561 @@ const DB_NAME = "vicky-draw";
 const STORE_NAME = "drawings";
 const AUTOSAVE_ID = "autosave";
 const MAX_HISTORY = 40;
-const MIN_ZOOM = 0.5;
+const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
+const STICKER_MIN_SIZE = 24;
+const STICKER_MAX_SIZE = 240;
 const ZOOM_STEP = 0.2;
 const EMOJI_FONT = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif";
 
 const STICKERS = [
-  { name: "Cuore", value: "❤️", keywords: "cuore amore heart love rosso" },
-  { name: "Cuori", value: "💕", keywords: "cuori amore heart love rosa" },
-  { name: "Stella", value: "⭐", keywords: "stella star magia giallo" },
-  { name: "Scintille", value: "✨", keywords: "scintille magia glitter sparkles stelle" },
-  { name: "Arcobaleno", value: "🌈", keywords: "arcobaleno rainbow colore cielo" },
-  { name: "Sole", value: "☀️", keywords: "sole sun estate caldo cielo" },
-  { name: "Luna", value: "🌙", keywords: "luna moon notte cielo" },
-  { name: "Nuvola", value: "☁️", keywords: "nuvola cloud cielo meteo" },
-  { name: "Fiore", value: "🌸", keywords: "fiore flower rosa primavera" },
-  { name: "Tulipano", value: "🌷", keywords: "tulipano fiore flower primavera" },
-  { name: "Albero", value: "🌳", keywords: "albero tree natura bosco" },
-  { name: "Gatto", value: "🐱", keywords: "gatto cat animale miao" },
-  { name: "Cane", value: "🐶", keywords: "cane dog animale bau" },
-  { name: "Unicorno", value: "🦄", keywords: "unicorno unicorn magia cavallo" },
-  { name: "Farfalla", value: "🦋", keywords: "farfalla butterfly animale insetto" },
-  { name: "Pesce", value: "🐠", keywords: "pesce fish mare acqua" },
-  { name: "Delfino", value: "🐬", keywords: "delfino dolphin mare acqua" },
-  { name: "Tartaruga", value: "🐢", keywords: "tartaruga turtle animale" },
-  { name: "Dinosauro", value: "🦖", keywords: "dinosauro dino rex animale" },
-  { name: "Drago", value: "🐉", keywords: "drago dragon fantasy" },
-  { name: "Principessa", value: "👑", keywords: "principessa corona queen re regina princess" },
-  { name: "Castello", value: "🏰", keywords: "castello castle principessa favola" },
-  { name: "Casa", value: "🏠", keywords: "casa home house" },
-  { name: "Auto", value: "🚗", keywords: "auto car macchina veicolo" },
-  { name: "Razzo", value: "🚀", keywords: "razzo rocket spazio luna" },
-  { name: "Ufo", value: "🛸", keywords: "ufo alieno spazio" },
-  { name: "Palla", value: "⚽", keywords: "palla calcio football sport" },
-  { name: "Basket", value: "🏀", keywords: "basket sport palla" },
-  { name: "Pizza", value: "🍕", keywords: "pizza cibo food" },
-  { name: "Gelato", value: "🍦", keywords: "gelato ice cream dolce estate" },
-  { name: "Cupcake", value: "🧁", keywords: "cupcake torta dolce cake" },
-  { name: "Regalo", value: "🎁", keywords: "regalo gift festa compleanno" },
-  { name: "Palloncino", value: "🎈", keywords: "palloncino balloon festa compleanno" },
-  { name: "Musica", value: "🎵", keywords: "musica note song canzone" },
-  { name: "Pennello", value: "🖌️", keywords: "pennello arte disegno paint" },
-  { name: "Sorriso", value: "😊", keywords: "sorriso smile felice faccina" },
-  { name: "Wow", value: "🤩", keywords: "wow stelle occhi faccina" },
-  { name: "Fuoco", value: "🔥", keywords: "fuoco fire caldo" },
-  { name: "Fulmine", value: "⚡", keywords: "fulmine lightning energia" },
-  { name: "Diamante", value: "💎", keywords: "diamante gemma brillante jewel" },
+  {
+    "name": "Cuore",
+    "value": "❤️",
+    "keywords": "cuore amore heart love rosso rosa"
+  },
+  {
+    "name": "Cuori",
+    "value": "💕",
+    "keywords": "cuori amore heart love rosa"
+  },
+  {
+    "name": "Cuore brillante",
+    "value": "💖",
+    "keywords": "cuore brillante amore glitter"
+  },
+  {
+    "name": "Stella",
+    "value": "⭐",
+    "keywords": "stella star magia giallo"
+  },
+  {
+    "name": "Scintille",
+    "value": "✨",
+    "keywords": "scintille magia glitter sparkles stelle"
+  },
+  {
+    "name": "Arcobaleno",
+    "value": "🌈",
+    "keywords": "arcobaleno rainbow colore cielo"
+  },
+  {
+    "name": "Sole",
+    "value": "☀️",
+    "keywords": "sole sun estate caldo cielo"
+  },
+  {
+    "name": "Luna",
+    "value": "🌙",
+    "keywords": "luna moon notte cielo"
+  },
+  {
+    "name": "Nuvola",
+    "value": "☁️",
+    "keywords": "nuvola cloud cielo meteo"
+  },
+  {
+    "name": "Neve",
+    "value": "❄️",
+    "keywords": "neve snow inverno fiocco"
+  },
+  {
+    "name": "Fiore",
+    "value": "🌸",
+    "keywords": "fiore flower rosa primavera"
+  },
+  {
+    "name": "Tulipano",
+    "value": "🌷",
+    "keywords": "tulipano fiore flower primavera"
+  },
+  {
+    "name": "Girasole",
+    "value": "🌻",
+    "keywords": "girasole fiore sole estate"
+  },
+  {
+    "name": "Quadrifoglio",
+    "value": "🍀",
+    "keywords": "quadrifoglio fortuna verde lucky"
+  },
+  {
+    "name": "Albero",
+    "value": "🌳",
+    "keywords": "albero tree natura bosco"
+  },
+  {
+    "name": "Fungo",
+    "value": "🍄",
+    "keywords": "fungo bosco fiaba natura"
+  },
+  {
+    "name": "Gatto",
+    "value": "🐱",
+    "keywords": "gatto cat animale miao"
+  },
+  {
+    "name": "Cane",
+    "value": "🐶",
+    "keywords": "cane dog animale bau"
+  },
+  {
+    "name": "Coniglio",
+    "value": "🐰",
+    "keywords": "coniglio rabbit animale bunny"
+  },
+  {
+    "name": "Volpe",
+    "value": "🦊",
+    "keywords": "volpe fox animale bosco"
+  },
+  {
+    "name": "Panda",
+    "value": "🐼",
+    "keywords": "panda animale orso"
+  },
+  {
+    "name": "Koala",
+    "value": "🐨",
+    "keywords": "koala animale"
+  },
+  {
+    "name": "Leone",
+    "value": "🦁",
+    "keywords": "leone lion animale re"
+  },
+  {
+    "name": "Tigre",
+    "value": "🐯",
+    "keywords": "tigre tiger animale"
+  },
+  {
+    "name": "Unicorno",
+    "value": "🦄",
+    "keywords": "unicorno unicorn magia cavallo"
+  },
+  {
+    "name": "Cavallo",
+    "value": "🐴",
+    "keywords": "cavallo horse animale"
+  },
+  {
+    "name": "Farfalla",
+    "value": "🦋",
+    "keywords": "farfalla butterfly animale insetto"
+  },
+  {
+    "name": "Coccinella",
+    "value": "🐞",
+    "keywords": "coccinella ladybug insetto fortuna"
+  },
+  {
+    "name": "Ape",
+    "value": "🐝",
+    "keywords": "ape bee insetto miele"
+  },
+  {
+    "name": "Pesce",
+    "value": "🐠",
+    "keywords": "pesce fish mare acqua"
+  },
+  {
+    "name": "Delfino",
+    "value": "🐬",
+    "keywords": "delfino dolphin mare acqua"
+  },
+  {
+    "name": "Balena",
+    "value": "🐳",
+    "keywords": "balena whale mare acqua"
+  },
+  {
+    "name": "Tartaruga",
+    "value": "🐢",
+    "keywords": "tartaruga turtle animale"
+  },
+  {
+    "name": "Dinosauro",
+    "value": "🦖",
+    "keywords": "dinosauro dino rex animale"
+  },
+  {
+    "name": "Brontosauro",
+    "value": "🦕",
+    "keywords": "dinosauro bronto animale"
+  },
+  {
+    "name": "Drago",
+    "value": "🐉",
+    "keywords": "drago dragon fantasy"
+  },
+  {
+    "name": "Principessa",
+    "value": "👑",
+    "keywords": "principessa corona queen re regina princess"
+  },
+  {
+    "name": "Castello",
+    "value": "🏰",
+    "keywords": "castello castle principessa favola"
+  },
+  {
+    "name": "Fata",
+    "value": "🧚",
+    "keywords": "fata fairy magia favola"
+  },
+  {
+    "name": "Sirena",
+    "value": "🧜",
+    "keywords": "sirena mermaid mare fantasy"
+  },
+  {
+    "name": "Magia",
+    "value": "🪄",
+    "keywords": "bacchetta magia magic wand"
+  },
+  {
+    "name": "Gemma",
+    "value": "💎",
+    "keywords": "diamante gemma brillante jewel"
+  },
+  {
+    "name": "Casa",
+    "value": "🏠",
+    "keywords": "casa home house"
+  },
+  {
+    "name": "Scuola",
+    "value": "🏫",
+    "keywords": "scuola school classe"
+  },
+  {
+    "name": "Tenda",
+    "value": "⛺",
+    "keywords": "tenda campeggio camping vacanza"
+  },
+  {
+    "name": "Auto",
+    "value": "🚗",
+    "keywords": "auto car macchina veicolo"
+  },
+  {
+    "name": "Treno",
+    "value": "🚂",
+    "keywords": "treno train veicolo"
+  },
+  {
+    "name": "Bici",
+    "value": "🚲",
+    "keywords": "bici bicicletta bike"
+  },
+  {
+    "name": "Barca",
+    "value": "⛵",
+    "keywords": "barca vela mare boat"
+  },
+  {
+    "name": "Aereo",
+    "value": "✈️",
+    "keywords": "aereo plane viaggio"
+  },
+  {
+    "name": "Razzo",
+    "value": "🚀",
+    "keywords": "razzo rocket spazio luna"
+  },
+  {
+    "name": "Ufo",
+    "value": "🛸",
+    "keywords": "ufo alieno spazio"
+  },
+  {
+    "name": "Pianeta",
+    "value": "🪐",
+    "keywords": "pianeta spazio saturno"
+  },
+  {
+    "name": "Palla",
+    "value": "⚽",
+    "keywords": "palla calcio football sport"
+  },
+  {
+    "name": "Basket",
+    "value": "🏀",
+    "keywords": "basket sport palla"
+  },
+  {
+    "name": "Tennis",
+    "value": "🎾",
+    "keywords": "tennis sport palla"
+  },
+  {
+    "name": "Medaglia",
+    "value": "🏅",
+    "keywords": "medaglia sport premio"
+  },
+  {
+    "name": "Pizza",
+    "value": "🍕",
+    "keywords": "pizza cibo food"
+  },
+  {
+    "name": "Gelato",
+    "value": "🍦",
+    "keywords": "gelato ice cream dolce estate"
+  },
+  {
+    "name": "Cupcake",
+    "value": "🧁",
+    "keywords": "cupcake torta dolce cake"
+  },
+  {
+    "name": "Torta",
+    "value": "🎂",
+    "keywords": "torta compleanno cake festa"
+  },
+  {
+    "name": "Lecca lecca",
+    "value": "🍭",
+    "keywords": "lecca lecca dolce candy caramella"
+  },
+  {
+    "name": "Popcorn",
+    "value": "🍿",
+    "keywords": "popcorn cinema snack"
+  },
+  {
+    "name": "Fragola",
+    "value": "🍓",
+    "keywords": "fragola frutta rossa"
+  },
+  {
+    "name": "Anguria",
+    "value": "🍉",
+    "keywords": "anguria watermelon estate"
+  },
+  {
+    "name": "Regalo",
+    "value": "🎁",
+    "keywords": "regalo gift festa compleanno"
+  },
+  {
+    "name": "Palloncino",
+    "value": "🎈",
+    "keywords": "palloncino balloon festa compleanno"
+  },
+  {
+    "name": "Coriandoli",
+    "value": "🎉",
+    "keywords": "coriandoli party festa"
+  },
+  {
+    "name": "Musica",
+    "value": "🎵",
+    "keywords": "musica note song canzone"
+  },
+  {
+    "name": "Microfono",
+    "value": "🎤",
+    "keywords": "microfono musica cantante"
+  },
+  {
+    "name": "Pennello",
+    "value": "🖌️",
+    "keywords": "pennello arte disegno paint"
+  },
+  {
+    "name": "Tavolozza",
+    "value": "🎨",
+    "keywords": "tavolozza arte colori disegno"
+  },
+  {
+    "name": "Matita",
+    "value": "✏️",
+    "keywords": "matita scuola disegno pencil"
+  },
+  {
+    "name": "Libro",
+    "value": "📚",
+    "keywords": "libro libri scuola lettura"
+  },
+  {
+    "name": "Sorriso",
+    "value": "😊",
+    "keywords": "sorriso smile felice faccina"
+  },
+  {
+    "name": "Risata",
+    "value": "😄",
+    "keywords": "risata sorriso felice faccina"
+  },
+  {
+    "name": "Wow",
+    "value": "🤩",
+    "keywords": "wow stelle occhi faccina"
+  },
+  {
+    "name": "Occhiolino",
+    "value": "😉",
+    "keywords": "occhiolino wink faccina"
+  },
+  {
+    "name": "Robot",
+    "value": "🤖",
+    "keywords": "robot tecnologia futuro"
+  },
+  {
+    "name": "Alieno",
+    "value": "👽",
+    "keywords": "alieno ufo spazio"
+  },
+  {
+    "name": "Fantasma",
+    "value": "👻",
+    "keywords": "fantasma halloween boo"
+  },
+  {
+    "name": "Zucca",
+    "value": "🎃",
+    "keywords": "zucca halloween pumpkin"
+  },
+  {
+    "name": "Fuoco",
+    "value": "🔥",
+    "keywords": "fuoco fire caldo"
+  },
+  {
+    "name": "Fulmine",
+    "value": "⚡",
+    "keywords": "fulmine lightning energia"
+  },
+  {
+    "name": "Bolla",
+    "value": "🫧",
+    "keywords": "bolla bolle sapone bubble"
+  },
+  {
+    "name": "Fiocco",
+    "value": "🎀",
+    "keywords": "fiocco rosa regalo ribbon"
+  }
 ];
 
 const BACKGROUNDS = [
   {
-    id: "white",
-    name: "Bianco",
-    keywords: "bianco white foglio pulito",
-    css: "#ffffff",
+    "id": "white",
+    "name": "Bianco",
+    "keywords": "bianco white foglio pulito",
+    "css": "#ffffff"
   },
   {
-    id: "grid",
-    name: "Quadretti",
-    keywords: "quadretti griglia grid quaderno scuola",
-    css: "linear-gradient(90deg, rgba(184, 205, 255, 0.55) 1px, transparent 1px), linear-gradient(rgba(184, 205, 255, 0.55) 1px, transparent 1px), #ffffff",
+    "id": "paper",
+    "name": "Carta crema",
+    "keywords": "carta foglio crema paper caldo",
+    "css": "radial-gradient(circle, rgba(222,184,135,0.18) 1px, transparent 2px), #fffaf0"
   },
   {
-    id: "dots",
-    name: "Pois",
-    keywords: "pois dots puntini coriandoli",
-    css: "radial-gradient(circle, rgba(255,122,168,0.45) 2px, transparent 3px), #ffffff",
+    "id": "grid",
+    "name": "Quadretti",
+    "keywords": "quadretti griglia grid quaderno scuola",
+    "css": "linear-gradient(90deg, rgba(184, 205, 255, 0.55) 1px, transparent 1px), linear-gradient(rgba(184, 205, 255, 0.55) 1px, transparent 1px), #ffffff"
   },
   {
-    id: "pink",
-    name: "Rosa",
-    keywords: "rosa pink sfumato gradient",
-    css: "linear-gradient(135deg, #fff0f7 0%, #ffd6e7 100%)",
+    "id": "lines",
+    "name": "Righe",
+    "keywords": "righe quaderno scuola lines paper",
+    "css": "linear-gradient(rgba(116,164,255,0.34) 1px, transparent 1px), #ffffff"
   },
   {
-    id: "sky",
-    name: "Cielo",
-    keywords: "cielo sky nuvole azzurro",
-    css: "linear-gradient(180deg, #bfe9ff 0%, #ffffff 100%)",
+    "id": "dots",
+    "name": "Pois",
+    "keywords": "pois dots puntini coriandoli",
+    "css": "radial-gradient(circle, rgba(255,122,168,0.45) 2px, transparent 3px), #ffffff"
   },
   {
-    id: "night",
-    name: "Notte",
-    keywords: "notte night stelle spazio luna blu",
-    css: "radial-gradient(circle at 20% 18%, rgba(255,255,255,0.9) 1px, transparent 2px), radial-gradient(circle at 70% 30%, rgba(255,255,255,0.75) 1px, transparent 2px), linear-gradient(180deg, #1f2a68 0%, #070b25 100%)",
+    "id": "pink",
+    "name": "Rosa",
+    "keywords": "rosa pink sfumato gradient",
+    "css": "linear-gradient(135deg, #fff0f7 0%, #ffd6e7 100%)"
   },
   {
-    id: "grass",
-    name: "Prato",
-    keywords: "prato erba grass verde natura",
-    css: "linear-gradient(180deg, #d9f7ff 0%, #ffffff 55%, #b7ef9a 55%, #66c45f 100%)",
+    "id": "sky",
+    "name": "Cielo",
+    "keywords": "cielo sky nuvole azzurro",
+    "css": "linear-gradient(180deg, #bfe9ff 0%, #ffffff 100%)"
   },
   {
-    id: "sea",
-    name: "Mare",
-    keywords: "mare sea acqua spiaggia estate blu",
-    css: "linear-gradient(180deg, #bdefff 0%, #fef6c9 45%, #65d5f6 46%, #1e9bd7 100%)",
+    "id": "night",
+    "name": "Notte",
+    "keywords": "notte night stelle spazio luna blu",
+    "css": "radial-gradient(circle at 20% 18%, rgba(255,255,255,0.9) 1px, transparent 2px), radial-gradient(circle at 70% 30%, rgba(255,255,255,0.75) 1px, transparent 2px), linear-gradient(180deg, #1f2a68 0%, #070b25 100%)"
   },
   {
-    id: "rainbow",
-    name: "Rainbow",
-    keywords: "arcobaleno rainbow colori colorato",
-    css: "linear-gradient(135deg, #ff9aa2, #ffdac1, #ffffb5, #b5ead7, #c7ceea)",
+    "id": "space",
+    "name": "Spazio",
+    "keywords": "spazio pianeti stelle rocket space",
+    "css": "radial-gradient(circle at 76% 22%, #ffdf7a 0 24px, transparent 25px), radial-gradient(circle at 18% 72%, #8be9ff 0 18px, transparent 19px), linear-gradient(180deg, #27106d 0%, #070720 100%)"
   },
+  {
+    "id": "grass",
+    "name": "Prato",
+    "keywords": "prato erba grass verde natura",
+    "css": "linear-gradient(180deg, #d9f7ff 0%, #ffffff 55%, #b7ef9a 55%, #66c45f 100%)"
+  },
+  {
+    "id": "forest",
+    "name": "Bosco",
+    "keywords": "bosco foresta alberi verde natura",
+    "css": "linear-gradient(180deg, #d7f6ff 0%, #f9fff8 45%, #7fd18a 46%, #2c7a46 100%)"
+  },
+  {
+    "id": "sea",
+    "name": "Mare",
+    "keywords": "mare sea acqua spiaggia estate blu",
+    "css": "linear-gradient(180deg, #bdefff 0%, #fef6c9 45%, #65d5f6 46%, #1e9bd7 100%)"
+  },
+  {
+    "id": "underwater",
+    "name": "Sott'acqua",
+    "keywords": "mare pesci acqua bolle underwater blu",
+    "css": "radial-gradient(circle at 18% 28%, rgba(255,255,255,0.7) 0 6px, transparent 7px), radial-gradient(circle at 78% 58%, rgba(255,255,255,0.55) 0 9px, transparent 10px), linear-gradient(180deg, #77e4ff 0%, #0874b9 100%)"
+  },
+  {
+    "id": "rainbow",
+    "name": "Rainbow",
+    "keywords": "arcobaleno rainbow colori colorato",
+    "css": "linear-gradient(135deg, #ff9aa2, #ffdac1, #ffffb5, #b5ead7, #c7ceea)"
+  },
+  {
+    "id": "sunset",
+    "name": "Tramonto",
+    "keywords": "tramonto sunset sole arancio mare",
+    "css": "radial-gradient(circle at 50% 45%, #ffe066 0 34px, transparent 35px), linear-gradient(180deg, #ff9a9e 0%, #fad0c4 55%, #63cdda 56%, #1289a7 100%)"
+  },
+  {
+    "id": "snow",
+    "name": "Neve",
+    "keywords": "neve inverno snow ghiaccio azzurro",
+    "css": "radial-gradient(circle, rgba(255,255,255,0.95) 2px, transparent 3px), linear-gradient(180deg, #dff7ff 0%, #ffffff 100%)"
+  },
+  {
+    "id": "candy",
+    "name": "Caramelle",
+    "keywords": "caramelle candy dolce righe rosa",
+    "css": "repeating-linear-gradient(135deg, #fff 0 18px, #ffe0ef 18px 36px, #d9f7ff 36px 54px)"
+  },
+  {
+    "id": "confetti",
+    "name": "Festa",
+    "keywords": "festa party coriandoli compleanno confetti",
+    "css": "radial-gradient(circle at 10% 20%, #ff7aa8 0 4px, transparent 5px), radial-gradient(circle at 78% 26%, #ffd166 0 4px, transparent 5px), radial-gradient(circle at 50% 74%, #6ee7b7 0 4px, transparent 5px), linear-gradient(135deg, #ffffff, #fff0f7)"
+  },
+  {
+    "id": "hearts",
+    "name": "Cuoricini",
+    "keywords": "cuori hearts amore rosa",
+    "css": "radial-gradient(circle at 20% 30%, rgba(255,122,168,0.35) 0 10px, transparent 11px), radial-gradient(circle at 80% 68%, rgba(255,122,168,0.28) 0 12px, transparent 13px), #fff7fb"
+  }
 ];
 
 let currentTool = "brush";
@@ -260,7 +712,9 @@ function serializeProject() {
 async function restoreProject(project) {
   const safeProject = project || {};
   currentBackgroundId = safeProject.backgroundId || "white";
-  stickers = Array.isArray(safeProject.stickers) ? safeProject.stickers.map((sticker) => ({ ...sticker })) : [];
+  stickers = Array.isArray(safeProject.stickers)
+    ? safeProject.stickers.map((sticker) => ({ rotation: 0, ...sticker }))
+    : [];
   activeStickerId = null;
   applyBackground(currentBackgroundId, { pushToHistory: false, autosave: false });
   renderStickers();
@@ -284,6 +738,20 @@ function pushHistory() {
 function updateHistoryButtons() {
   undoButton.disabled = undoStack.length === 0;
   redoButton.disabled = redoStack.length === 0;
+}
+
+function normalizeDegrees(value) {
+  const normalized = value % 360;
+  return normalized < 0 ? normalized + 360 : normalized;
+}
+
+function getStickerTransform(sticker) {
+  return `translate(-50%, -50%) rotate(${sticker.rotation || 0}deg)`;
+}
+
+function updateZoomControls() {
+  zoomOutButton.disabled = view.zoom <= MIN_ZOOM + 0.001;
+  zoomInButton.disabled = view.zoom >= MAX_ZOOM - 0.001;
 }
 
 function setTool(tool) {
@@ -373,6 +841,7 @@ function finishDrawing(event) {
 function applyViewTransform() {
   board.style.transform = `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})`;
   zoomResetButton.textContent = `${Math.round(view.zoom * 100)}%`;
+  updateZoomControls();
 }
 
 function setZoom(nextZoom, focalEvent = null) {
@@ -519,18 +988,45 @@ function applyBackground(id, options = {}) {
 
 function drawBackgroundOnContext(targetCtx, width, height, backgroundId) {
   const bg = getBackground(backgroundId);
+  const boardSize = getBoardSize();
+  const scale = width / boardSize.width;
+
+  function fillSolid(color) {
+    targetCtx.fillStyle = color;
+    targetCtx.fillRect(0, 0, width, height);
+  }
+
+  function fillLinear(colors, vertical = true) {
+    const gradient = vertical ? targetCtx.createLinearGradient(0, 0, 0, height) : targetCtx.createLinearGradient(0, 0, width, height);
+    colors.forEach(([stop, color]) => gradient.addColorStop(stop, color));
+    targetCtx.fillStyle = gradient;
+    targetCtx.fillRect(0, 0, width, height);
+  }
+
+  function drawDots(color, gap, radius, offset = 0) {
+    targetCtx.fillStyle = color;
+    for (let y = gap / 2 + offset; y < height; y += gap) {
+      for (let x = gap / 2 + offset; x < width; x += gap) {
+        targetCtx.beginPath();
+        targetCtx.arc(x, y, radius, 0, Math.PI * 2);
+        targetCtx.fill();
+      }
+    }
+  }
+
   targetCtx.save();
   targetCtx.clearRect(0, 0, width, height);
 
   if (bg.id === "white") {
-    targetCtx.fillStyle = "#ffffff";
-    targetCtx.fillRect(0, 0, width, height);
+    fillSolid("#ffffff");
+  } else if (bg.id === "paper") {
+    fillSolid("#fffaf0");
+    drawDots("rgba(222,184,135,0.18)", 18 * scale, 1.3 * scale);
   } else if (bg.id === "grid") {
-    targetCtx.fillStyle = "#ffffff";
-    targetCtx.fillRect(0, 0, width, height);
+    fillSolid("#ffffff");
     targetCtx.strokeStyle = "rgba(126, 158, 234, 0.42)";
-    targetCtx.lineWidth = Math.max(1, width / getBoardSize().width);
-    const gap = 24 * (width / getBoardSize().width);
+    targetCtx.lineWidth = Math.max(1, scale);
+    const gap = 24 * scale;
     for (let x = 0; x <= width; x += gap) {
       targetCtx.beginPath();
       targetCtx.moveTo(x, 0);
@@ -543,71 +1039,74 @@ function drawBackgroundOnContext(targetCtx, width, height, backgroundId) {
       targetCtx.lineTo(width, y);
       targetCtx.stroke();
     }
-  } else if (bg.id === "dots") {
-    targetCtx.fillStyle = "#ffffff";
-    targetCtx.fillRect(0, 0, width, height);
-    targetCtx.fillStyle = "rgba(255,122,168,0.45)";
-    const scale = width / getBoardSize().width;
-    const gap = 26 * scale;
-    const radius = 2.8 * scale;
-    for (let y = gap / 2; y < height; y += gap) {
-      for (let x = gap / 2; x < width; x += gap) {
-        targetCtx.beginPath();
-        targetCtx.arc(x, y, radius, 0, Math.PI * 2);
-        targetCtx.fill();
-      }
+  } else if (bg.id === "lines") {
+    fillSolid("#ffffff");
+    targetCtx.strokeStyle = "rgba(116,164,255,0.36)";
+    targetCtx.lineWidth = Math.max(1, scale);
+    const gap = 32 * scale;
+    for (let y = gap; y <= height; y += gap) {
+      targetCtx.beginPath();
+      targetCtx.moveTo(0, y);
+      targetCtx.lineTo(width, y);
+      targetCtx.stroke();
     }
+    targetCtx.strokeStyle = "rgba(255,122,168,0.38)";
+    targetCtx.beginPath();
+    targetCtx.moveTo(58 * scale, 0);
+    targetCtx.lineTo(58 * scale, height);
+    targetCtx.stroke();
+  } else if (bg.id === "dots") {
+    fillSolid("#ffffff");
+    drawDots("rgba(255,122,168,0.45)", 26 * scale, 2.8 * scale);
+  } else if (bg.id === "pink") {
+    fillLinear([[0, "#fff0f7"], [1, "#ffd6e7"]], false);
+  } else if (bg.id === "sky") {
+    fillLinear([[0, "#bfe9ff"], [1, "#ffffff"]]);
   } else if (bg.id === "night") {
-    const gradient = targetCtx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, "#1f2a68");
-    gradient.addColorStop(1, "#070b25");
-    targetCtx.fillStyle = gradient;
-    targetCtx.fillRect(0, 0, width, height);
+    fillLinear([[0, "#1f2a68"], [1, "#070b25"]]);
     targetCtx.fillStyle = "rgba(255,255,255,0.85)";
-    const stars = [
-      [0.18, 0.18],
-      [0.42, 0.12],
-      [0.72, 0.28],
-      [0.86, 0.16],
-      [0.61, 0.45],
-      [0.29, 0.36],
-    ];
+    const stars = [[0.18,0.18],[0.42,0.12],[0.72,0.28],[0.86,0.16],[0.61,0.45],[0.29,0.36]];
     for (const [x, y] of stars) {
       targetCtx.beginPath();
       targetCtx.arc(width * x, height * y, Math.max(1.4, width * 0.0025), 0, Math.PI * 2);
       targetCtx.fill();
     }
-  } else if (bg.id === "pink" || bg.id === "sky" || bg.id === "rainbow") {
-    const gradient = targetCtx.createLinearGradient(0, 0, width, height);
-    if (bg.id === "pink") {
-      gradient.addColorStop(0, "#fff0f7");
-      gradient.addColorStop(1, "#ffd6e7");
-    } else if (bg.id === "sky") {
-      gradient.addColorStop(0, "#bfe9ff");
-      gradient.addColorStop(1, "#ffffff");
-    } else {
-      gradient.addColorStop(0, "#ff9aa2");
-      gradient.addColorStop(0.25, "#ffdac1");
-      gradient.addColorStop(0.5, "#ffffb5");
-      gradient.addColorStop(0.75, "#b5ead7");
-      gradient.addColorStop(1, "#c7ceea");
-    }
-    targetCtx.fillStyle = gradient;
-    targetCtx.fillRect(0, 0, width, height);
+  } else if (bg.id === "space") {
+    fillLinear([[0, "#27106d"], [1, "#070720"]]);
+    drawDots("rgba(255,255,255,0.82)", 46 * scale, 1.5 * scale, 6 * scale);
+    targetCtx.fillStyle = "#ffdf7a";
+    targetCtx.beginPath();
+    targetCtx.arc(width * 0.76, height * 0.22, 34 * scale, 0, Math.PI * 2);
+    targetCtx.fill();
+    targetCtx.fillStyle = "#8be9ff";
+    targetCtx.beginPath();
+    targetCtx.arc(width * 0.18, height * 0.72, 24 * scale, 0, Math.PI * 2);
+    targetCtx.fill();
   } else if (bg.id === "grass") {
-    const sky = targetCtx.createLinearGradient(0, 0, 0, height * 0.55);
-    sky.addColorStop(0, "#d9f7ff");
-    sky.addColorStop(1, "#ffffff");
-    targetCtx.fillStyle = sky;
-    targetCtx.fillRect(0, 0, width, height * 0.55);
+    fillLinear([[0, "#d9f7ff"], [1, "#ffffff"]]);
     const grass = targetCtx.createLinearGradient(0, height * 0.55, 0, height);
     grass.addColorStop(0, "#b7ef9a");
     grass.addColorStop(1, "#66c45f");
     targetCtx.fillStyle = grass;
     targetCtx.fillRect(0, height * 0.55, width, height * 0.45);
+  } else if (bg.id === "forest") {
+    fillLinear([[0, "#d7f6ff"], [0.44, "#f9fff8"], [1, "#2c7a46"]]);
+    targetCtx.fillStyle = "#7fd18a";
+    targetCtx.fillRect(0, height * 0.46, width, height * 0.18);
+    for (let x = 35 * scale; x < width; x += 86 * scale) {
+      targetCtx.fillStyle = "#3d9957";
+      targetCtx.beginPath();
+      targetCtx.moveTo(x, height * 0.47);
+      targetCtx.lineTo(x - 28 * scale, height * 0.66);
+      targetCtx.lineTo(x + 28 * scale, height * 0.66);
+      targetCtx.closePath();
+      targetCtx.fill();
+      targetCtx.fillStyle = "#7b4f2c";
+      targetCtx.fillRect(x - 4 * scale, height * 0.63, 8 * scale, 40 * scale);
+    }
   } else if (bg.id === "sea") {
-    targetCtx.fillStyle = "#bdefff";
-    targetCtx.fillRect(0, 0, width, height * 0.45);
+    fillSolid("#bdefff");
+    fillSolid("#bdefff");
     targetCtx.fillStyle = "#fef6c9";
     targetCtx.fillRect(0, height * 0.45, width, height * 0.12);
     const sea = targetCtx.createLinearGradient(0, height * 0.52, 0, height);
@@ -615,6 +1114,61 @@ function drawBackgroundOnContext(targetCtx, width, height, backgroundId) {
     sea.addColorStop(1, "#1e9bd7");
     targetCtx.fillStyle = sea;
     targetCtx.fillRect(0, height * 0.52, width, height * 0.48);
+  } else if (bg.id === "underwater") {
+    fillLinear([[0, "#77e4ff"], [1, "#0874b9"]]);
+    targetCtx.strokeStyle = "rgba(255,255,255,0.72)";
+    targetCtx.lineWidth = Math.max(2, 2 * scale);
+    const bubbles = [[0.18,0.28,10],[0.78,0.58,14],[0.36,0.72,8],[0.62,0.22,6]];
+    for (const [x, y, r] of bubbles) {
+      targetCtx.beginPath();
+      targetCtx.arc(width * x, height * y, r * scale, 0, Math.PI * 2);
+      targetCtx.stroke();
+    }
+  } else if (bg.id === "rainbow") {
+    fillLinear([[0, "#ff9aa2"], [0.25, "#ffdac1"], [0.5, "#ffffb5"], [0.75, "#b5ead7"], [1, "#c7ceea"]], false);
+  } else if (bg.id === "sunset") {
+    fillLinear([[0, "#ff9a9e"], [0.55, "#fad0c4"], [0.56, "#63cdda"], [1, "#1289a7"]]);
+    targetCtx.fillStyle = "#ffe066";
+    targetCtx.beginPath();
+    targetCtx.arc(width * 0.5, height * 0.45, 44 * scale, 0, Math.PI * 2);
+    targetCtx.fill();
+  } else if (bg.id === "snow") {
+    fillLinear([[0, "#dff7ff"], [1, "#ffffff"]]);
+    drawDots("rgba(255,255,255,0.95)", 34 * scale, 2.5 * scale);
+  } else if (bg.id === "candy") {
+    fillSolid("#ffffff");
+    const stripe = 54 * scale;
+    for (let x = -height; x < width; x += stripe) {
+      targetCtx.save();
+      targetCtx.translate(x, 0);
+      targetCtx.rotate(-Math.PI / 4);
+      targetCtx.fillStyle = "#ffe0ef";
+      targetCtx.fillRect(0, 0, 18 * scale, width + height);
+      targetCtx.fillStyle = "#d9f7ff";
+      targetCtx.fillRect(36 * scale, 0, 18 * scale, width + height);
+      targetCtx.restore();
+    }
+  } else if (bg.id === "confetti") {
+    fillLinear([[0, "#ffffff"], [1, "#fff0f7"]], false);
+    const confetti = [[0.1,0.2,"#ff7aa8"],[0.78,0.26,"#ffd166"],[0.5,0.74,"#6ee7b7"],[0.26,0.62,"#8be9ff"],[0.88,0.78,"#b39ddb"]];
+    for (const [x, y, color] of confetti) {
+      targetCtx.fillStyle = color;
+      targetCtx.beginPath();
+      targetCtx.arc(width * x, height * y, 7 * scale, 0, Math.PI * 2);
+      targetCtx.fill();
+    }
+  } else if (bg.id === "hearts") {
+    fillSolid("#fff7fb");
+    targetCtx.fillStyle = "rgba(255,122,168,0.42)";
+    targetCtx.font = `${36 * scale}px ${EMOJI_FONT}`;
+    targetCtx.textAlign = "center";
+    targetCtx.textBaseline = "middle";
+    const hearts = [[0.2,0.3],[0.8,0.68],[0.48,0.18],[0.32,0.78]];
+    for (const [x, y] of hearts) {
+      targetCtx.fillText("❤", width * x, height * y);
+    }
+  } else {
+    fillSolid("#ffffff");
   }
 
   targetCtx.restore();
@@ -632,14 +1186,16 @@ function createCompositeDataUrl() {
   drawBackgroundOnContext(out, output.width, output.height, currentBackgroundId);
   out.drawImage(canvas, 0, 0, output.width, output.height);
 
-  out.save();
   out.textAlign = "center";
   out.textBaseline = "middle";
   for (const sticker of stickers) {
+    out.save();
+    out.translate(sticker.x * scaleX, sticker.y * scaleY);
+    out.rotate(((sticker.rotation || 0) * Math.PI) / 180);
     out.font = `${sticker.size * scaleY}px ${EMOJI_FONT}`;
-    out.fillText(sticker.value, sticker.x * scaleX, sticker.y * scaleY);
+    out.fillText(sticker.value, 0, 0);
+    out.restore();
   }
-  out.restore();
 
   return output.toDataURL("image/png");
 }
@@ -659,6 +1215,7 @@ function updateStickerElement(sticker) {
   element.style.left = `${sticker.x}px`;
   element.style.top = `${sticker.y}px`;
   element.style.fontSize = `${sticker.size}px`;
+  element.style.transform = getStickerTransform(sticker);
   element.classList.toggle("is-selected", sticker.id === activeStickerId);
 }
 
@@ -672,6 +1229,7 @@ function renderStickers() {
     element.style.left = `${sticker.x}px`;
     element.style.top = `${sticker.y}px`;
     element.style.fontSize = `${sticker.size}px`;
+    element.style.transform = getStickerTransform(sticker);
     element.classList.toggle("is-selected", sticker.id === activeStickerId);
 
     const glyph = document.createElement("span");
@@ -684,10 +1242,17 @@ function renderStickers() {
     resizeHandle.textContent = "↘";
     resizeHandle.setAttribute("aria-label", "Ridimensiona sticker");
 
+    const rotateHandle = document.createElement("button");
+    rotateHandle.type = "button";
+    rotateHandle.className = "sticker-rotate";
+    rotateHandle.textContent = "⟳";
+    rotateHandle.setAttribute("aria-label", "Ruota sticker");
+
     element.addEventListener("pointerdown", (event) => beginStickerMove(event, sticker.id));
     resizeHandle.addEventListener("pointerdown", (event) => beginStickerResize(event, sticker.id));
+    rotateHandle.addEventListener("pointerdown", (event) => beginStickerRotate(event, sticker.id));
 
-    element.append(glyph, resizeHandle);
+    element.append(glyph, resizeHandle, rotateHandle);
     stickerLayer.append(element);
   }
 }
@@ -739,6 +1304,29 @@ function beginStickerResize(event, stickerId) {
   event.currentTarget.setPointerCapture?.(event.pointerId);
 }
 
+function beginStickerRotate(event, stickerId) {
+  event.preventDefault();
+  event.stopPropagation();
+  const sticker = stickers.find((item) => item.id === stickerId);
+  if (!sticker) {
+    return;
+  }
+
+  pushHistory();
+  activeStickerId = stickerId;
+  updateStickerSelection();
+  const point = clientToBoardPoint(event);
+  const startAngle = Math.atan2(point.y - sticker.y, point.x - sticker.x);
+  stickerAction = {
+    type: "rotate",
+    pointerId: event.pointerId,
+    stickerId,
+    startAngle,
+    originalRotation: sticker.rotation || 0,
+  };
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+}
+
 function continueStickerAction(event) {
   if (!stickerAction || event.pointerId !== stickerAction.pointerId) {
     return;
@@ -756,9 +1344,13 @@ function continueStickerAction(event) {
   if (stickerAction.type === "move") {
     sticker.x = clamp(stickerAction.originalX + point.x - stickerAction.startX, 0, size.width);
     sticker.y = clamp(stickerAction.originalY + point.y - stickerAction.startY, 0, size.height);
-  } else {
+  } else if (stickerAction.type === "resize") {
     const delta = Math.max(point.x - stickerAction.startX, point.y - stickerAction.startY);
-    sticker.size = clamp(stickerAction.originalSize + delta, 24, 220);
+    sticker.size = clamp(stickerAction.originalSize + delta, STICKER_MIN_SIZE, STICKER_MAX_SIZE);
+  } else if (stickerAction.type === "rotate") {
+    const currentAngle = Math.atan2(point.y - sticker.y, point.x - sticker.x);
+    const deltaDegrees = ((currentAngle - stickerAction.startAngle) * 180) / Math.PI;
+    sticker.rotation = normalizeDegrees(stickerAction.originalRotation + deltaDegrees);
   }
 
   updateStickerElement(sticker);
@@ -798,6 +1390,7 @@ function addSticker(stickerDefinition) {
     x: center.x,
     y: center.y,
     size: 72,
+    rotation: 0,
   };
   stickers.push(sticker);
   activeStickerId = sticker.id;
