@@ -743,3 +743,54 @@ input {
   color: var(--blue);
   font-weight: 900;
 }
+
+.upload-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 122, 168, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.upload-mode-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.upload-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.upload-mode-option:has(input:checked) {
+  border-color: var(--accent);
+  background: #fff0f7;
+  color: var(--accent-strong);
+}
+
+.upload-mode-option input {
+  accent-color: var(--accent);
+}
+
+.asset-badge-local {
+  background: #eafbf4;
+  color: #237251;
+}
+
+.asset-badge-shared-editable {
+  background: #fff3db;
+  color: #9a5c00;
+}

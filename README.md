@@ -60,9 +60,18 @@ http://localhost:5173
 - Uploaded assets can be deleted instantly from the UI and work offline on the same device.
 
 
-## v8 shared library
+## v8/v9 shared library
 - Legge `https://ma55im0.github.io/vicky-draw-library/library.json`.
 - Ignora gli asset generati/importati automaticamente delle vecchie prove.
 - Salva la libreria condivisa in IndexedDB per l'uso offline.
 - Mantiene il caricamento locale manuale e aggiunge drag and drop.
 - Non usa Vercel API, OpenAI, Iconify o generazione procedurale.
+
+
+## v9 shared uploads
+
+- Upload manuale Locale o Condiviso.
+- Gli sticker caricati vengono convertiti in PNG, con ritaglio automatico del bordo esterno quando possibile.
+- Gli sfondi caricati vengono ridimensionati e adattati alla tavola.
+- Gli upload condivisi usano `https://vicky-draw-api.vercel.app/api/upload-asset` e richiedono un PIN admin configurato su Vercel.
+- Gli asset condivisi vengono salvati nel repo `vicky-draw-library` e restano disponibili offline dopo la sincronizzazione.

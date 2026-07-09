@@ -33,6 +33,8 @@ const uploadBackgroundInput = document.querySelector("#uploadBackgroundInput");
 const stickerDropZone = document.querySelector("#stickerDropZone");
 const backgroundDropZone = document.querySelector("#backgroundDropZone");
 const clearUploadedAssetsButton = document.querySelector("#clearUploadedAssetsButton");
+const uploadScopeLocal = document.querySelector("#uploadScopeLocal");
+const uploadScopeShared = document.querySelector("#uploadScopeShared");
 const stickersTab = document.querySelector("#stickersTab");
 const backgroundsTab = document.querySelector("#backgroundsTab");
 const assetGrid = document.querySelector("#assetGrid");
@@ -60,7 +62,14 @@ const EMOJI_FONT = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-se
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const REMOTE_LIBRARY_URL = "https://ma55im0.github.io/vicky-draw-library/library.json";
 const REMOTE_LIBRARY_ORIGIN = new URL(REMOTE_LIBRARY_URL).origin;
+const SHARED_UPLOAD_URL = "https://vicky-draw-api.vercel.app/api/upload-asset";
+const SHARED_DELETE_URL = "https://vicky-draw-api.vercel.app/api/delete-asset";
 const SHARED_LIBRARY_CACHE_ID = "current";
+const ADMIN_PIN_STORAGE_KEY = "vicky-draw-admin-pin";
+const PENDING_SHARED_STORAGE_KEY = "vicky-draw-pending-shared-assets-v1";
+const STICKER_OUTPUT_MAX_SIZE = 900;
+const BACKGROUND_OUTPUT_WIDTH = 1600;
+const BACKGROUND_OUTPUT_MAX_HEIGHT = 1400;
 
 let sharedLibrary = {
   version: 0,
@@ -1120,10 +1129,71 @@ async function normalizeSharedAsset(asset, kind) {
     src: url,
     dataUrl: null,
     isShared: true,
+    canDelete: Boolean(asset.canDelete) || String(asset.category || "").toLowerCase() === "custom" || /^stickers\/custom\//.test(String(asset.src || "")) || /^backgrounds\/custom\//.test(String(asset.src || "")),
     source: "shared-library",
   };
   normalized.dataUrl = await fetchAsDataUrl(url).catch(() => null);
   return normalized;
+}
+
+function readPendingSharedAssets() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PENDING_SHARED_STORAGE_KEY) || "[]");
+    const now = Date.now();
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => item && Number(item.expiresAt || 0) > now)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingSharedAssets(items) {
+  try {
+    localStorage.setItem(PENDING_SHARED_STORAGE_KEY, JSON.stringify(items.slice(-80)));
+  } catch {
+    // Se lo storage è pieno, la libreria remota continuerà comunque ad aggiornarsi.
+  }
+}
+
+function rememberPendingSharedAsset(asset) {
+  const pending = readPendingSharedAssets().filter((item) => item.remoteId !== asset.remoteId);
+  pending.push({ ...asset, expiresAt: Date.now() + 30 * 60 * 1000 });
+  writePendingSharedAssets(pending);
+}
+
+function forgetPendingSharedAsset(remoteId) {
+  writePendingSharedAssets(readPendingSharedAssets().filter((item) => item.remoteId !== remoteId));
+}
+
+function mergePendingSharedAssets(library) {
+  const pending = readPendingSharedAssets();
+  if (!pending.length) {
+    return library;
+  }
+
+  const knownIds = new Set([
+    ...library.stickers.map((item) => item.remoteId || item.id),
+    ...library.backgrounds.map((item) => item.remoteId || item.id),
+  ]);
+  const stillPending = [];
+
+  for (const item of pending) {
+    if (knownIds.has(item.remoteId)) {
+      continue;
+    }
+    const cleanItem = { ...item };
+    delete cleanItem.expiresAt;
+    if (cleanItem.kind === "sticker") {
+      library.stickers.push(cleanItem);
+    } else if (cleanItem.kind === "background") {
+      library.backgrounds.push(cleanItem);
+    }
+    stillPending.push(item);
+  }
+
+  writePendingSharedAssets(stillPending);
+  return library;
 }
 
 async function normalizeSharedLibrary(rawLibrary) {
@@ -1144,12 +1214,12 @@ async function normalizeSharedLibrary(rawLibrary) {
       backgrounds.push(normalized);
     }
   }
-  return {
+  return mergePendingSharedAssets({
     version: Number(rawLibrary?.version) || 0,
     updatedAt: String(rawLibrary?.updatedAt || ""),
     stickers,
     backgrounds,
-  };
+  });
 }
 
 async function readSharedLibraryCache() {
@@ -1224,6 +1294,377 @@ function keywordsFromFilename(filename) {
   return titleFromFilename(filename).toLowerCase();
 }
 
+function getUploadScope() {
+  return uploadScopeShared?.checked ? "shared" : "local";
+}
+
+function canvasToBlob(canvas, type = "image/png", quality = 0.92) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error("Impossibile convertire l'immagine."));
+      }
+    }, type, quality);
+  });
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Immagine non leggibile."));
+    };
+    image.src = url;
+  });
+}
+
+function makeCanvas(width, height) {
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(width));
+  out.height = Math.max(1, Math.round(height));
+  return out;
+}
+
+function colorDistanceSq(r1, g1, b1, r2, g2, b2) {
+  const dr = r1 - r2;
+  const dg = g1 - g2;
+  const db = b1 - b2;
+  return dr * dr + dg * dg + db * db;
+}
+
+function collectEdgePalette(data, width, height) {
+  const counts = new Map();
+  const step = Math.max(1, Math.floor(Math.max(width, height) / 260));
+  const add = (x, y) => {
+    const i = (y * width + x) * 4;
+    const a = data[i + 3];
+    if (a < 20) {
+      return;
+    }
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const key = `${Math.round(r / 16) * 16},${Math.round(g / 16) * 16},${Math.round(b / 16) * 16}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  };
+
+  for (let x = 0; x < width; x += step) {
+    add(x, 0);
+    add(x, height - 1);
+  }
+  for (let y = 0; y < height; y += step) {
+    add(0, y);
+    add(width - 1, y);
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([key]) => key.split(",").map(Number));
+}
+
+function removeOuterBackground(imageData, width, height) {
+  const data = imageData.data;
+  const palette = collectEdgePalette(data, width, height);
+  const toleranceSq = 42 * 42;
+  const total = width * height;
+  const visited = new Uint8Array(total);
+  const queue = new Int32Array(total);
+  let head = 0;
+  let tail = 0;
+
+  const isCandidateBackground = (index) => {
+    const offset = index * 4;
+    const alpha = data[offset + 3];
+    if (alpha < 18) {
+      return true;
+    }
+    const r = data[offset];
+    const g = data[offset + 1];
+    const b = data[offset + 2];
+    for (const color of palette) {
+      if (colorDistanceSq(r, g, b, color[0], color[1], color[2]) <= toleranceSq) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const push = (index) => {
+    if (index < 0 || index >= total || visited[index] || !isCandidateBackground(index)) {
+      return;
+    }
+    visited[index] = 1;
+    queue[tail++] = index;
+  };
+
+  for (let x = 0; x < width; x += 1) {
+    push(x);
+    push((height - 1) * width + x);
+  }
+  for (let y = 0; y < height; y += 1) {
+    push(y * width);
+    push(y * width + width - 1);
+  }
+
+  while (head < tail) {
+    const index = queue[head++];
+    const x = index % width;
+    const y = Math.floor(index / width);
+    if (x > 0) push(index - 1);
+    if (x < width - 1) push(index + 1);
+    if (y > 0) push(index - width);
+    if (y < height - 1) push(index + width);
+  }
+
+  for (let i = 0; i < total; i += 1) {
+    if (visited[i]) {
+      data[i * 4 + 3] = 0;
+    }
+  }
+
+  return imageData;
+}
+
+function findAlphaBounds(imageData, width, height) {
+  const data = imageData.data;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = data[(y * width + x) * 4 + 3];
+      if (alpha > 24) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+
+  if (maxX < 0 || maxY < 0) {
+    return { x: 0, y: 0, width, height };
+  }
+
+  const pad = Math.max(8, Math.round(Math.max(width, height) * 0.035));
+  minX = Math.max(0, minX - pad);
+  minY = Math.max(0, minY - pad);
+  maxX = Math.min(width - 1, maxX + pad);
+  maxY = Math.min(height - 1, maxY + pad);
+  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+}
+
+async function processStickerFile(file) {
+  const image = await loadImageFromFile(file);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  if (!sourceWidth || !sourceHeight) {
+    throw new Error("Sticker non valido.");
+  }
+
+  const scale = Math.min(1, STICKER_OUTPUT_MAX_SIZE / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const work = makeCanvas(width, height);
+  const workCtx = work.getContext("2d", { willReadFrequently: true });
+  workCtx.clearRect(0, 0, width, height);
+  workCtx.drawImage(image, 0, 0, width, height);
+
+  let imageData = workCtx.getImageData(0, 0, width, height);
+  imageData = removeOuterBackground(imageData, width, height);
+  workCtx.putImageData(imageData, 0, 0);
+
+  const bounds = findAlphaBounds(imageData, width, height);
+  const out = makeCanvas(bounds.width, bounds.height);
+  const outCtx = out.getContext("2d");
+  outCtx.clearRect(0, 0, out.width, out.height);
+  outCtx.drawImage(work, bounds.x, bounds.y, bounds.width, bounds.height, 0, 0, out.width, out.height);
+
+  const blob = await canvasToBlob(out, "image/png");
+  return {
+    dataUrl: await blobToDataUrl(blob),
+    mimeType: "image/png",
+    extension: "png",
+    width: out.width,
+    height: out.height,
+    bytes: blob.size,
+    wasProcessed: true,
+  };
+}
+
+function currentBoardAspect() {
+  const rect = board.getBoundingClientRect();
+  const width = rect.width || board.clientWidth || 4;
+  const height = rect.height || board.clientHeight || 3;
+  return clamp(width / height, 0.55, 2.4);
+}
+
+async function processBackgroundFile(file) {
+  const image = await loadImageFromFile(file);
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  if (!sourceWidth || !sourceHeight) {
+    throw new Error("Sfondo non valido.");
+  }
+
+  const aspect = currentBoardAspect();
+  let targetWidth = BACKGROUND_OUTPUT_WIDTH;
+  let targetHeight = Math.round(targetWidth / aspect);
+  if (targetHeight > BACKGROUND_OUTPUT_MAX_HEIGHT) {
+    targetHeight = BACKGROUND_OUTPUT_MAX_HEIGHT;
+    targetWidth = Math.round(targetHeight * aspect);
+  }
+
+  const out = makeCanvas(targetWidth, targetHeight);
+  const outCtx = out.getContext("2d");
+  outCtx.fillStyle = "#ffffff";
+  outCtx.fillRect(0, 0, out.width, out.height);
+  drawImageCover(outCtx, image, out.width, out.height);
+
+  let blob = await canvasToBlob(out, "image/jpeg", 0.86);
+  if (blob.size > 2.7 * 1024 * 1024) {
+    blob = await canvasToBlob(out, "image/jpeg", 0.76);
+  }
+
+  return {
+    dataUrl: await blobToDataUrl(blob),
+    mimeType: "image/jpeg",
+    extension: "jpg",
+    width: out.width,
+    height: out.height,
+    bytes: blob.size,
+    wasProcessed: true,
+  };
+}
+
+async function processAssetFile(file, kind) {
+  return kind === "sticker" ? processStickerFile(file) : processBackgroundFile(file);
+}
+
+function getAdminPin() {
+  let pin = localStorage.getItem(ADMIN_PIN_STORAGE_KEY) || "";
+  if (pin) {
+    return pin;
+  }
+  pin = window.prompt("PIN admin per caricare nella libreria condivisa:") || "";
+  pin = pin.trim();
+  if (pin) {
+    localStorage.setItem(ADMIN_PIN_STORAGE_KEY, pin);
+  }
+  return pin;
+}
+
+async function postSharedAsset(endpoint, body) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) {
+    if (response.status === 401 || response.status === 403) {
+      localStorage.removeItem(ADMIN_PIN_STORAGE_KEY);
+    }
+    throw new Error(payload.reason || payload.message || "Operazione condivisa non riuscita.");
+  }
+  return payload;
+}
+
+function normalizeApiSharedAsset(asset, kind, dataUrl = null) {
+  const remoteId = String(asset.id || "");
+  const name = String(asset.name || asset.title || remoteId || "Elemento");
+  const tags = Array.isArray(asset.tags) ? asset.tags.map(String) : [];
+  const src = asset.url || makeSharedAssetUrl(asset.src) || dataUrl;
+  return {
+    id: `shared:${remoteId}`,
+    remoteId,
+    kind,
+    type: "image",
+    name,
+    title: name,
+    category: String(asset.category || "custom"),
+    keywords: `${asset.keywords || ""} ${tags.join(" ")} custom`.trim(),
+    tags,
+    src,
+    dataUrl,
+    isShared: true,
+    canDelete: true,
+    source: "shared-library",
+  };
+}
+
+function upsertSharedAssetInMemory(record) {
+  const list = record.kind === "sticker" ? sharedLibrary.stickers : sharedLibrary.backgrounds;
+  const index = list.findIndex((item) => item.remoteId === record.remoteId || item.id === record.id);
+  if (index >= 0) {
+    list[index] = record;
+  } else {
+    list.push(record);
+  }
+}
+
+async function uploadSharedAsset(file, kind, processed) {
+  const pin = getAdminPin();
+  if (!pin) {
+    throw new Error("Upload condiviso annullato: PIN mancante.");
+  }
+  const name = titleFromFilename(file.name);
+  const keywords = keywordsFromFilename(file.name);
+  const payload = await postSharedAsset(SHARED_UPLOAD_URL, {
+    pin,
+    kind,
+    name,
+    keywords,
+    tags: keywords.split(/\s+/).filter(Boolean),
+    mimeType: processed.mimeType,
+    extension: processed.extension,
+    width: processed.width,
+    height: processed.height,
+    dataUrl: processed.dataUrl,
+  });
+
+  const normalized = normalizeApiSharedAsset(payload.asset, kind, processed.dataUrl);
+  upsertSharedAssetInMemory(normalized);
+  rememberPendingSharedAsset(normalized);
+  await saveSharedLibraryCache(sharedLibrary);
+  return normalized;
+}
+
+async function saveLocalAsset(file, kind, processed) {
+  const name = titleFromFilename(file.name);
+  const id = `manual-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const record = {
+    id,
+    kind,
+    type: "image",
+    name,
+    title: name,
+    category: "manual",
+    keywords: keywordsFromFilename(file.name),
+    tags: keywordsFromFilename(file.name).split(/\s+/).filter(Boolean),
+    dataUrl: processed.dataUrl,
+    mimeType: processed.mimeType,
+    width: processed.width,
+    height: processed.height,
+    isUploaded: true,
+    source: "manual-local",
+    createdAt: new Date().toISOString(),
+  };
+  await putUploadedAsset(record);
+  return record;
+}
+
 async function loadUploadedAssets() {
   try {
     const records = await getAllUploadedAssets();
@@ -1252,8 +1693,13 @@ async function handleAssetUpload(files, kind) {
     return;
   }
 
+  const scope = getUploadScope();
   let imported = 0;
   let skipped = 0;
+  let sharedImported = 0;
+  const errors = [];
+
+  updateGenerateStatus(`Preparo ${list.length} file…`, "info");
 
   for (const file of list) {
     if (!file.type.startsWith("image/")) {
@@ -1266,37 +1712,36 @@ async function handleAssetUpload(files, kind) {
       continue;
     }
 
-    const dataUrl = await fileToDataUrl(file);
-    const name = titleFromFilename(file.name);
-    const id = `manual-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const record = {
-      id,
-      kind,
-      type: "image",
-      name,
-      title: name,
-      category: "manual",
-      keywords: keywordsFromFilename(file.name),
-      tags: keywordsFromFilename(file.name).split(/\s+/).filter(Boolean),
-      dataUrl,
-      isUploaded: true,
-      source: "manual",
-      createdAt: new Date().toISOString(),
-    };
-
-    await putUploadedAsset(record);
-    imported += 1;
+    try {
+      updateGenerateStatus(`Converto ${file.name}…`, "info");
+      const processed = await processAssetFile(file, kind);
+      if (scope === "shared") {
+        updateGenerateStatus(`Pubblico ${file.name} nella libreria condivisa…`, "info");
+        await uploadSharedAsset(file, kind, processed);
+        sharedImported += 1;
+      } else {
+        await saveLocalAsset(file, kind, processed);
+        imported += 1;
+      }
+    } catch (error) {
+      skipped += 1;
+      errors.push(`${file.name}: ${error.message || "errore"}`);
+    }
   }
 
   await loadUploadedAssets();
   setAssetKind(kind === "sticker" ? "stickers" : "backgrounds");
-  updateGenerateStatus(
-    skipped
-      ? `Caricati ${imported} elementi. ${skipped} file saltati perché non validi o troppo grandi.`
-      : `Caricati ${imported} elementi nella libreria locale di questo dispositivo.`,
-    imported ? "success" : "warn",
-  );
-  setStatus(imported ? "Libreria locale aggiornata" : "Nessun file caricato");
+  renderAssetGrid();
+
+  const totalOk = imported + sharedImported;
+  const where = scope === "shared" ? "condivisa" : "locale";
+  const base = totalOk
+    ? `Caricati ${totalOk} elementi nella libreria ${where}.`
+    : "Nessun file caricato.";
+  const suffix = skipped ? ` ${skipped} file saltati.` : "";
+  const delay = scope === "shared" && sharedImported ? " Gli altri dispositivi li vedranno dopo l'aggiornamento di GitHub Pages; su questo dispositivo sono già in cache." : "";
+  updateGenerateStatus(`${base}${suffix}${delay}${errors.length ? ` ${errors[0]}` : ""}`, totalOk ? "success" : "warn");
+  setStatus(totalOk ? `Libreria ${where} aggiornata` : "Nessun file caricato");
 }
 
 async function deleteUploadedAsset(assetId, label = "questo elemento") {
@@ -1311,6 +1756,39 @@ async function deleteUploadedAsset(assetId, label = "questo elemento") {
   }
   await loadUploadedAssets();
   updateGenerateStatus(`${label} eliminato dalla libreria locale.`, "success");
+}
+
+async function deleteSharedAsset(record) {
+  const label = getAssetName(record);
+  const confirmed = window.confirm(`Vuoi eliminare ${label} dalla libreria condivisa di tutti i dispositivi?`);
+  if (!confirmed) {
+    return;
+  }
+  const pin = getAdminPin();
+  if (!pin) {
+    updateGenerateStatus("Eliminazione condivisa annullata: PIN mancante.", "warn");
+    return;
+  }
+
+  try {
+    await postSharedAsset(SHARED_DELETE_URL, {
+      pin,
+      id: record.remoteId,
+      src: record.src,
+    });
+    sharedLibrary.stickers = sharedLibrary.stickers.filter((item) => item.remoteId !== record.remoteId);
+    sharedLibrary.backgrounds = sharedLibrary.backgrounds.filter((item) => item.remoteId !== record.remoteId);
+    forgetPendingSharedAsset(record.remoteId);
+    if (currentBackgroundId === record.id) {
+      applyBackground("white", { pushToHistory: true, autosave: true });
+    }
+    await saveSharedLibraryCache(sharedLibrary);
+    renderAssetGrid();
+    updateCombinedLibraryStatus(`${label} eliminato.`);
+    updateGenerateStatus(`${label} eliminato dalla libreria condivisa.`, "success");
+  } catch (error) {
+    updateGenerateStatus(error.message || "Eliminazione condivisa non riuscita.", "warn");
+  }
 }
 
 async function clearUploadedAssets() {
@@ -1905,14 +2383,29 @@ function renderAssetGrid() {
 
       if (record.isShared) {
         const badge = document.createElement("span");
-        badge.className = "asset-badge asset-badge-shared";
+        badge.className = record.canDelete ? "asset-badge asset-badge-shared-editable" : "asset-badge asset-badge-shared";
         badge.textContent = "Condiviso";
         button.append(badge);
+
+        if (record.canDelete) {
+          const deleteButton = document.createElement("span");
+          deleteButton.className = "asset-delete";
+          deleteButton.title = "Elimina dalla libreria condivisa";
+          deleteButton.setAttribute("role", "button");
+          deleteButton.setAttribute("aria-label", `Elimina ${getAssetName(record)} dalla libreria condivisa`);
+          deleteButton.textContent = "×";
+          deleteButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            deleteSharedAsset(record);
+          });
+          button.append(deleteButton);
+        }
       }
 
       if (record.isUploaded) {
         const badge = document.createElement("span");
-        badge.className = "asset-badge";
+        badge.className = "asset-badge asset-badge-local";
         badge.textContent = "Locale";
         button.append(badge);
 
@@ -1946,14 +2439,29 @@ function renderAssetGrid() {
 
       if (record.isShared) {
         const badge = document.createElement("span");
-        badge.className = "asset-badge asset-badge-shared";
+        badge.className = record.canDelete ? "asset-badge asset-badge-shared-editable" : "asset-badge asset-badge-shared";
         badge.textContent = "Condiviso";
         button.append(badge);
+
+        if (record.canDelete) {
+          const deleteButton = document.createElement("span");
+          deleteButton.className = "asset-delete";
+          deleteButton.title = "Elimina dalla libreria condivisa";
+          deleteButton.setAttribute("role", "button");
+          deleteButton.setAttribute("aria-label", `Elimina ${getAssetName(record)} dalla libreria condivisa`);
+          deleteButton.textContent = "×";
+          deleteButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            deleteSharedAsset(record);
+          });
+          button.append(deleteButton);
+        }
       }
 
       if (record.isUploaded) {
         const badge = document.createElement("span");
-        badge.className = "asset-badge";
+        badge.className = "asset-badge asset-badge-local";
         badge.textContent = "Locale";
         button.append(badge);
 
