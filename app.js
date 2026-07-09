@@ -1,5 +1,7 @@
 const canvas = document.querySelector("#drawingCanvas");
 const ctx = canvas.getContext("2d", { willReadFrequently: true });
+const overlayCanvas = document.querySelector("#drawingOverlayCanvas");
+const overlayCtx = overlayCanvas.getContext("2d", { willReadFrequently: true });
 
 const drawingStage = document.querySelector("#drawingStage");
 const board = document.querySelector("#board");
@@ -7,6 +9,7 @@ const stickerLayer = document.querySelector("#stickerLayer");
 
 const brushButton = document.querySelector("#brushButton");
 const eraserButton = document.querySelector("#eraserButton");
+const textButton = document.querySelector("#textButton");
 const handButton = document.querySelector("#handButton");
 const colorPicker = document.querySelector("#colorPicker");
 const sizePicker = document.querySelector("#sizePicker");
@@ -42,12 +45,21 @@ const emptyAssets = document.querySelector("#emptyAssets");
 const libraryStatus = document.querySelector("#libraryStatus");
 const refreshLibraryButton = document.querySelector("#refreshLibraryButton");
 
+const assetMetaDialog = document.querySelector("#assetMetaDialog");
+const assetMetaForm = document.querySelector("#assetMetaForm");
+const assetMetaTitle = document.querySelector("#assetMetaTitle");
+const assetMetaPreview = document.querySelector("#assetMetaPreview");
+const assetMetaName = document.querySelector("#assetMetaName");
+const assetMetaTags = document.querySelector("#assetMetaTags");
+const assetMetaCancel = document.querySelector("#assetMetaCancel");
+const assetMetaCancelX = document.querySelector("#assetMetaCancelX");
+
 const galleryDialog = document.querySelector("#galleryDialog");
 const galleryGrid = document.querySelector("#galleryGrid");
 const emptyGallery = document.querySelector("#emptyGallery");
 
 const DB_NAME = "vicky-draw";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_NAME = "drawings";
 const ASSET_STORE_NAME = "custom-assets";
 const SHARED_LIBRARY_STORE_NAME = "shared-library-cache";
@@ -56,7 +68,7 @@ const MAX_HISTORY = 40;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const STICKER_MIN_SIZE = 24;
-const STICKER_MAX_SIZE = 240;
+const STICKER_MAX_SIZE = 320;
 const ZOOM_STEP = 0.2;
 const EMOJI_FONT = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif";
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
@@ -68,8 +80,9 @@ const SHARED_LIBRARY_CACHE_ID = "current";
 const ADMIN_PIN_STORAGE_KEY = "vicky-draw-admin-pin";
 const PENDING_SHARED_STORAGE_KEY = "vicky-draw-pending-shared-assets-v1";
 const STICKER_OUTPUT_MAX_SIZE = 900;
-const BACKGROUND_OUTPUT_WIDTH = 1600;
-const BACKGROUND_OUTPUT_MAX_HEIGHT = 1400;
+const BACKGROUND_OUTPUT_WIDTH = 2400;
+const BACKGROUND_OUTPUT_MAX_HEIGHT = 1800;
+const BACKGROUND_UPLOAD_MAX_BYTES = 2800000;
 
 let sharedLibrary = {
   version: 0,
@@ -696,54 +709,85 @@ function clientToBoardPoint(event) {
   };
 }
 
-function configureStroke() {
-  ctx.lineWidth = Number(sizePicker.value) * (window.devicePixelRatio || 1);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = colorPicker.value;
-  ctx.globalCompositeOperation = currentTool === "eraser" ? "destination-out" : "source-over";
+function getPaintContexts() {
+  return currentTool === "eraser"
+    ? [ctx, overlayCtx]
+    : [overlayCtx];
+}
+
+function configureStroke(targetCtx) {
+  targetCtx.lineWidth = Number(sizePicker.value) * (window.devicePixelRatio || 1);
+  targetCtx.lineCap = "round";
+  targetCtx.lineJoin = "round";
+  targetCtx.strokeStyle = colorPicker.value;
+  targetCtx.globalCompositeOperation = currentTool === "eraser" ? "destination-out" : "source-over";
 }
 
 function resizeCanvas() {
-  const previous = document.createElement("canvas");
-  previous.width = canvas.width;
-  previous.height = canvas.height;
+  const previousBase = document.createElement("canvas");
+  previousBase.width = canvas.width;
+  previousBase.height = canvas.height;
 
   if (canvas.width && canvas.height) {
-    previous.getContext("2d").drawImage(canvas, 0, 0);
+    previousBase.getContext("2d").drawImage(canvas, 0, 0);
+  }
+
+  const previousOverlay = document.createElement("canvas");
+  previousOverlay.width = overlayCanvas.width;
+  previousOverlay.height = overlayCanvas.height;
+
+  if (overlayCanvas.width && overlayCanvas.height) {
+    previousOverlay.getContext("2d").drawImage(overlayCanvas, 0, 0);
   }
 
   const dpr = window.devicePixelRatio || 1;
   const cssWidth = canvas.clientWidth || board.clientWidth || 1;
   const cssHeight = canvas.clientHeight || board.clientHeight || 1;
-  canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
-  canvas.height = Math.max(1, Math.floor(cssHeight * dpr));
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const pixelWidth = Math.max(1, Math.floor(cssWidth * dpr));
+  const pixelHeight = Math.max(1, Math.floor(cssHeight * dpr));
 
-  if (previous.width && previous.height) {
-    ctx.drawImage(previous, 0, 0, canvas.width, canvas.height);
+  canvas.width = pixelWidth;
+  canvas.height = pixelHeight;
+  overlayCanvas.width = pixelWidth;
+  overlayCanvas.height = pixelHeight;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+  if (previousBase.width && previousBase.height) {
+    ctx.drawImage(previousBase, 0, 0, canvas.width, canvas.height);
+  }
+  if (previousOverlay.width && previousOverlay.height) {
+    overlayCtx.drawImage(previousOverlay, 0, 0, overlayCanvas.width, overlayCanvas.height);
   }
 }
 
-function drawImageFromDataUrl(dataUrl) {
+function drawCanvasFromDataUrl(targetCanvas, targetCtx, dataUrl) {
   return new Promise((resolve) => {
     const image = new Image();
     image.onload = () => {
-      ctx.globalCompositeOperation = "source-over";
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      targetCtx.globalCompositeOperation = "source-over";
+      targetCtx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+      targetCtx.drawImage(image, 0, 0, targetCanvas.width, targetCanvas.height);
       resolve();
     };
+    image.onerror = () => resolve();
     image.src = dataUrl;
   });
 }
 
+function drawImageFromDataUrl(dataUrl) {
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  return drawCanvasFromDataUrl(canvas, ctx, dataUrl);
+}
+
 function serializeProject() {
   return {
-    version: 3,
+    version: 4,
     backgroundId: currentBackgroundId,
     stickers: stickers.map((sticker) => ({ ...sticker })),
     drawingDataUrl: canvas.toDataURL("image/png"),
+    overlayDrawingDataUrl: overlayCanvas.toDataURL("image/png"),
   };
 }
 
@@ -757,10 +801,14 @@ async function restoreProject(project) {
   applyBackground(currentBackgroundId, { pushToHistory: false, autosave: false });
   renderStickers();
 
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
   if (safeProject.drawingDataUrl) {
-    await drawImageFromDataUrl(safeProject.drawingDataUrl);
-  } else {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    await drawCanvasFromDataUrl(canvas, ctx, safeProject.drawingDataUrl);
+  }
+  if (safeProject.overlayDrawingDataUrl) {
+    await drawCanvasFromDataUrl(overlayCanvas, overlayCtx, safeProject.overlayDrawingDataUrl);
   }
 }
 
@@ -801,16 +849,19 @@ function setTool(tool) {
   eraserButton.setAttribute("aria-pressed", String(tool === "eraser"));
   handButton.setAttribute("aria-pressed", String(tool === "hand"));
   board.classList.toggle("is-hand-mode", tool === "hand");
+  board.classList.toggle("is-draw-mode", tool === "brush" || tool === "eraser");
   handPointers.clear();
   handGesture = null;
 }
 
 function drawLine(from, to) {
-  configureStroke();
-  ctx.beginPath();
-  ctx.moveTo(from.x, from.y);
-  ctx.lineTo(to.x, to.y);
-  ctx.stroke();
+  for (const targetCtx of getPaintContexts()) {
+    configureStroke(targetCtx);
+    targetCtx.beginPath();
+    targetCtx.moveTo(from.x, from.y);
+    targetCtx.lineTo(to.x, to.y);
+    targetCtx.stroke();
+  }
 }
 
 function beginDrawing(event) {
@@ -831,11 +882,13 @@ function beginDrawing(event) {
   isDrawing = true;
   drawingPointerId = event.pointerId;
   lastPoint = clientToCanvasPoint(event);
-  configureStroke();
-  ctx.beginPath();
-  ctx.arc(lastPoint.x, lastPoint.y, ctx.lineWidth / 2, 0, Math.PI * 2);
-  ctx.fillStyle = currentTool === "eraser" ? "rgba(0,0,0,1)" : colorPicker.value;
-  ctx.fill();
+  for (const targetCtx of getPaintContexts()) {
+    configureStroke(targetCtx);
+    targetCtx.beginPath();
+    targetCtx.arc(lastPoint.x, lastPoint.y, targetCtx.lineWidth / 2, 0, Math.PI * 2);
+    targetCtx.fillStyle = currentTool === "eraser" ? "rgba(0,0,0,1)" : colorPicker.value;
+    targetCtx.fill();
+  }
 }
 
 function continueDrawing(event) {
@@ -873,6 +926,7 @@ function finishDrawing(event) {
   drawingPointerId = null;
   lastPoint = null;
   ctx.globalCompositeOperation = "source-over";
+  overlayCtx.globalCompositeOperation = "source-over";
   scheduleAutosave();
 }
 
@@ -1294,6 +1348,78 @@ function keywordsFromFilename(filename) {
   return titleFromFilename(filename).toLowerCase();
 }
 
+function tagsToArray(value) {
+  return String(value || "")
+    .split(/[,;#]+|\s{2,}/)
+    .map((tag) => tag.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 18);
+}
+
+function metadataFromFilename(filename) {
+  const name = titleFromFilename(filename);
+  const tags = keywordsFromFilename(filename).split(/\s+/).filter(Boolean).slice(0, 10);
+  return { name, tags, keywords: tags.join(" ") || name.toLowerCase() };
+}
+
+function askAssetMetadata(file, kind, processed) {
+  const fallback = metadataFromFilename(file.name);
+  if (!assetMetaDialog || !assetMetaForm) {
+    const name = window.prompt("Nome elemento:", fallback.name) || fallback.name;
+    const tagText = window.prompt("Tag separati da virgola:", fallback.tags.join(", ")) || fallback.tags.join(", ");
+    const tags = tagsToArray(tagText);
+    return Promise.resolve({ name: name.trim() || fallback.name, tags, keywords: tags.join(" ") || fallback.keywords });
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      assetMetaForm.removeEventListener("submit", onSubmit);
+      assetMetaCancel?.removeEventListener("click", onCancel);
+      assetMetaCancelX?.removeEventListener("click", onCancel);
+      assetMetaDialog.removeEventListener("cancel", onCancel);
+      assetMetaDialog.removeEventListener("close", onClose);
+    };
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (assetMetaDialog.open) {
+        assetMetaDialog.close();
+      }
+      resolve(value);
+    };
+    const onSubmit = (event) => {
+      event.preventDefault();
+      const name = assetMetaName.value.trim() || fallback.name;
+      const tags = tagsToArray(assetMetaTags.value);
+      const keywords = [...new Set([...tags, ...metadataFromFilename(name).tags])].join(" ");
+      done({ name, tags, keywords: keywords || fallback.keywords });
+    };
+    const onCancel = (event) => {
+      event.preventDefault();
+      done(null);
+    };
+    const onClose = () => {
+      if (!settled) done(null);
+    };
+
+    assetMetaTitle.textContent = kind === "sticker" ? "Dettagli sticker" : "Dettagli sfondo";
+    assetMetaPreview.src = processed?.dataUrl || "";
+    assetMetaPreview.classList.toggle("is-sticker-preview", kind === "sticker");
+    assetMetaName.value = fallback.name;
+    assetMetaTags.value = fallback.tags.join(", ");
+
+    assetMetaForm.addEventListener("submit", onSubmit);
+    assetMetaCancel?.addEventListener("click", onCancel);
+    assetMetaCancelX?.addEventListener("click", onCancel);
+    assetMetaDialog.addEventListener("cancel", onCancel);
+    assetMetaDialog.addEventListener("close", onClose);
+    assetMetaDialog.showModal();
+    window.setTimeout(() => assetMetaName.focus(), 80);
+  });
+}
+
 function getUploadScope() {
   return uploadScopeShared?.checked ? "shared" : "local";
 }
@@ -1503,11 +1629,31 @@ async function processStickerFile(file) {
   };
 }
 
-function currentBoardAspect() {
-  const rect = board.getBoundingClientRect();
-  const width = rect.width || board.clientWidth || 4;
-  const height = rect.height || board.clientHeight || 3;
-  return clamp(width / height, 0.55, 2.4);
+function downscaleCanvas(sourceCanvas, scale) {
+  const out = makeCanvas(sourceCanvas.width * scale, sourceCanvas.height * scale);
+  const outCtx = out.getContext("2d");
+  outCtx.imageSmoothingEnabled = true;
+  outCtx.imageSmoothingQuality = "high";
+  outCtx.drawImage(sourceCanvas, 0, 0, out.width, out.height);
+  return out;
+}
+
+async function canvasToHighQualityBackgroundBlob(sourceCanvas) {
+  let working = sourceCanvas;
+  const qualities = [0.94, 0.91, 0.88, 0.84, 0.8];
+
+  for (let pass = 0; pass < 3; pass += 1) {
+    for (const quality of qualities) {
+      const blob = await canvasToBlob(working, "image/jpeg", quality);
+      if (blob.size <= BACKGROUND_UPLOAD_MAX_BYTES || (pass === 2 && quality === qualities[qualities.length - 1])) {
+        return { blob, width: working.width, height: working.height };
+      }
+    }
+    working = downscaleCanvas(working, 0.86);
+  }
+
+  const blob = await canvasToBlob(working, "image/jpeg", 0.78);
+  return { blob, width: working.width, height: working.height };
 }
 
 async function processBackgroundFile(file) {
@@ -1528,22 +1674,20 @@ async function processBackgroundFile(file) {
 
   const out = makeCanvas(targetWidth, targetHeight);
   const outCtx = out.getContext("2d");
+  outCtx.imageSmoothingEnabled = true;
+  outCtx.imageSmoothingQuality = "high";
   outCtx.fillStyle = "#ffffff";
   outCtx.fillRect(0, 0, out.width, out.height);
   drawImageCover(outCtx, image, out.width, out.height);
 
-  let blob = await canvasToBlob(out, "image/jpeg", 0.86);
-  if (blob.size > 2.7 * 1024 * 1024) {
-    blob = await canvasToBlob(out, "image/jpeg", 0.76);
-  }
-
+  const encoded = await canvasToHighQualityBackgroundBlob(out);
   return {
-    dataUrl: await blobToDataUrl(blob),
+    dataUrl: await blobToDataUrl(encoded.blob),
     mimeType: "image/jpeg",
     extension: "jpg",
-    width: out.width,
-    height: out.height,
-    bytes: blob.size,
+    width: encoded.width,
+    height: encoded.height,
+    bytes: encoded.blob.size,
     wasProcessed: true,
   };
 }
@@ -1614,19 +1758,21 @@ function upsertSharedAssetInMemory(record) {
   }
 }
 
-async function uploadSharedAsset(file, kind, processed) {
+async function uploadSharedAsset(file, kind, processed, metadata) {
   const pin = getAdminPin();
   if (!pin) {
     throw new Error("Upload condiviso annullato: PIN mancante.");
   }
-  const name = titleFromFilename(file.name);
-  const keywords = keywordsFromFilename(file.name);
+  const fallback = metadataFromFilename(file.name);
+  const name = metadata?.name || fallback.name;
+  const tags = Array.isArray(metadata?.tags) ? metadata.tags : fallback.tags;
+  const keywords = metadata?.keywords || tags.join(" ") || fallback.keywords;
   const payload = await postSharedAsset(SHARED_UPLOAD_URL, {
     pin,
     kind,
     name,
     keywords,
-    tags: keywords.split(/\s+/).filter(Boolean),
+    tags,
     mimeType: processed.mimeType,
     extension: processed.extension,
     width: processed.width,
@@ -1641,8 +1787,11 @@ async function uploadSharedAsset(file, kind, processed) {
   return normalized;
 }
 
-async function saveLocalAsset(file, kind, processed) {
-  const name = titleFromFilename(file.name);
+async function saveLocalAsset(file, kind, processed, metadata) {
+  const fallback = metadataFromFilename(file.name);
+  const name = metadata?.name || fallback.name;
+  const tags = Array.isArray(metadata?.tags) ? metadata.tags : fallback.tags;
+  const keywords = metadata?.keywords || tags.join(" ") || fallback.keywords;
   const id = `manual-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const record = {
     id,
@@ -1651,8 +1800,8 @@ async function saveLocalAsset(file, kind, processed) {
     name,
     title: name,
     category: "manual",
-    keywords: keywordsFromFilename(file.name),
-    tags: keywordsFromFilename(file.name).split(/\s+/).filter(Boolean),
+    keywords,
+    tags,
     dataUrl: processed.dataUrl,
     mimeType: processed.mimeType,
     width: processed.width,
@@ -1715,12 +1864,17 @@ async function handleAssetUpload(files, kind) {
     try {
       updateGenerateStatus(`Converto ${file.name}…`, "info");
       const processed = await processAssetFile(file, kind);
+      const metadata = await askAssetMetadata(file, kind, processed);
+      if (!metadata) {
+        skipped += 1;
+        continue;
+      }
       if (scope === "shared") {
-        updateGenerateStatus(`Pubblico ${file.name} nella libreria condivisa…`, "info");
-        await uploadSharedAsset(file, kind, processed);
+        updateGenerateStatus(`Pubblico ${metadata.name} nella libreria condivisa…`, "info");
+        await uploadSharedAsset(file, kind, processed, metadata);
         sharedImported += 1;
       } else {
-        await saveLocalAsset(file, kind, processed);
+        await saveLocalAsset(file, kind, processed, metadata);
         imported += 1;
       }
     } catch (error) {
@@ -2086,6 +2240,31 @@ async function drawBackgroundOnContextAsync(targetCtx, width, height, background
   drawBackgroundOnContext(targetCtx, width, height, backgroundId);
 }
 
+function splitTextLines(text) {
+  return String(text || "Testo").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 6);
+}
+
+function drawTextElementOnContext(targetCtx, element, scaleX, scaleY) {
+  const lines = splitTextLines(element.value);
+  const fontSize = element.size * Math.min(scaleX, scaleY);
+  const lineHeight = fontSize * 1.16;
+  targetCtx.font = `800 ${fontSize}px ui-rounded, "Comic Sans MS", "Trebuchet MS", system-ui, sans-serif`;
+  targetCtx.textAlign = "center";
+  targetCtx.textBaseline = "middle";
+  targetCtx.lineJoin = "round";
+  targetCtx.miterLimit = 2;
+  targetCtx.strokeStyle = "rgba(255,255,255,0.92)";
+  targetCtx.lineWidth = Math.max(4, fontSize * 0.12);
+  targetCtx.fillStyle = element.color || colorPicker.value || "#4738ff";
+  const startY = -((lines.length - 1) * lineHeight) / 2;
+
+  lines.forEach((line, index) => {
+    const y = startY + index * lineHeight;
+    targetCtx.strokeText(line, 0, y);
+    targetCtx.fillText(line, 0, y);
+  });
+}
+
 async function createCompositeDataUrl() {
   const output = document.createElement("canvas");
   output.width = canvas.width;
@@ -2115,6 +2294,8 @@ async function createCompositeDataUrl() {
       } catch {
         // Se uno sticker remoto non è caricabile, viene semplicemente saltato nell'export.
       }
+    } else if (sticker.type === "text") {
+      drawTextElementOnContext(out, sticker, scaleX, scaleY);
     } else {
       out.font = `${sticker.size * scaleY}px ${EMOJI_FONT}`;
       out.fillText(sticker.value, 0, 0);
@@ -2122,6 +2303,9 @@ async function createCompositeDataUrl() {
 
     out.restore();
   }
+
+  out.globalCompositeOperation = "source-over";
+  out.drawImage(overlayCanvas, 0, 0, output.width, output.height);
 
   return output.toDataURL("image/png");
 }
@@ -2159,14 +2343,18 @@ function renderStickers() {
     element.style.transform = getStickerTransform(sticker);
     element.classList.toggle("is-selected", sticker.id === activeStickerId);
     element.classList.toggle("is-image-sticker", sticker.type === "image");
+    element.classList.toggle("is-text-item", sticker.type === "text");
 
     const glyph = document.createElement("span");
-    glyph.className = "sticker-glyph";
+    glyph.className = sticker.type === "text" ? "sticker-glyph sticker-text" : "sticker-glyph";
     if (sticker.type === "image" && (sticker.dataUrl || sticker.src)) {
       const image = document.createElement("img");
       image.src = sticker.dataUrl || sticker.src;
       image.alt = sticker.name || "Sticker";
       glyph.append(image);
+    } else if (sticker.type === "text") {
+      glyph.textContent = sticker.value || "Testo";
+      glyph.style.color = sticker.color || colorPicker.value;
     } else {
       glyph.textContent = sticker.value;
     }
@@ -2184,6 +2372,7 @@ function renderStickers() {
     rotateHandle.setAttribute("aria-label", "Ruota sticker");
 
     element.addEventListener("pointerdown", (event) => beginStickerMove(event, sticker.id));
+    element.addEventListener("dblclick", (event) => editTextElement(event, sticker.id));
     resizeHandle.addEventListener("pointerdown", (event) => beginStickerResize(event, sticker.id));
     rotateHandle.addEventListener("pointerdown", (event) => beginStickerRotate(event, sticker.id));
 
@@ -2301,6 +2490,59 @@ function finishStickerAction(event) {
   scheduleAutosave();
 }
 
+function clearActiveSticker() {
+  if (!activeStickerId || stickerAction) {
+    return;
+  }
+  activeStickerId = null;
+  updateStickerSelection();
+}
+
+function addTextElement() {
+  const text = window.prompt("Scrivi il testo da aggiungere:", "Ciao!");
+  if (!text || !text.trim()) {
+    return;
+  }
+
+  pushHistory();
+  const center = getVisibleBoardCenter();
+  const element = {
+    id: createId("text"),
+    type: "text",
+    value: text.trim().slice(0, 120),
+    name: "Testo",
+    color: colorPicker.value,
+    x: center.x,
+    y: center.y,
+    size: 40,
+    rotation: 0,
+  };
+  stickers.push(element);
+  activeStickerId = element.id;
+  setTool("hand");
+  renderStickers();
+  scheduleAutosave();
+  setStatus("Testo aggiunto");
+}
+
+function editTextElement(event, stickerId) {
+  const element = stickers.find((item) => item.id === stickerId);
+  if (!element || element.type !== "text") {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  const nextText = window.prompt("Modifica testo:", element.value || "");
+  if (!nextText || !nextText.trim() || nextText === element.value) {
+    return;
+  }
+  pushHistory();
+  element.value = nextText.trim().slice(0, 120);
+  activeStickerId = stickerId;
+  renderStickers();
+  scheduleAutosave();
+}
+
 function getVisibleBoardCenter() {
   const stageRect = drawingStage.getBoundingClientRect();
   const point = clientToBoardPoint({
@@ -2332,6 +2574,7 @@ function addSticker(stickerDefinition) {
   };
   stickers.push(sticker);
   activeStickerId = sticker.id;
+  setTool("hand");
   renderStickers();
   scheduleAutosave();
   setStatus(`Sticker ${sticker.name.toLowerCase()} aggiunto`);
@@ -2732,6 +2975,7 @@ function clearCanvas() {
 
   pushHistory();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
   stickers = [];
   activeStickerId = null;
   applyBackground("white", { pushToHistory: false, autosave: false });
@@ -2777,6 +3021,7 @@ installButton.addEventListener("click", async () => {
 
 brushButton.addEventListener("click", () => setTool("brush"));
 eraserButton.addEventListener("click", () => setTool("eraser"));
+textButton?.addEventListener("click", addTextElement);
 handButton.addEventListener("click", () => setTool("hand"));
 
 
@@ -2869,6 +3114,16 @@ canvas.addEventListener("pointermove", continueDrawing);
 canvas.addEventListener("pointerup", finishDrawing);
 canvas.addEventListener("pointercancel", finishDrawing);
 
+document.addEventListener("pointerdown", (event) => {
+  if (!activeStickerId) {
+    return;
+  }
+  if (event.target.closest?.(".sticker-item")) {
+    return;
+  }
+  clearActiveSticker();
+}, { capture: true });
+
 window.addEventListener("pointermove", continueStickerAction, { passive: false });
 window.addEventListener("pointerup", finishStickerAction, { passive: false });
 window.addEventListener("pointercancel", finishStickerAction, { passive: false });
@@ -2880,10 +3135,11 @@ window.addEventListener("resize", () => {
 });
 
 async function initApp() {
+  setTool("brush");
   resizeCanvas();
   applyBackground("white", { pushToHistory: false, autosave: false });
   applyViewTransform();
-  updateGenerateStatus("Libreria condivisa da GitHub + caricamenti locali. Trascina immagini nei riquadri per aggiungerle solo a questo dispositivo.");
+  updateGenerateStatus("Trascina immagini nei riquadri. Scegli Solo qui o Condiviso prima del caricamento.");
   await loadRemoteLibrary();
   await loadAutosave();
   updateHistoryButtons();

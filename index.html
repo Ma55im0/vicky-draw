@@ -28,7 +28,8 @@
       <main class="drawing-stage" id="drawingStage" aria-label="Area di disegno">
         <div class="board" id="board">
           <canvas id="drawingCanvas"></canvas>
-          <div class="sticker-layer" id="stickerLayer" aria-label="Sticker sul disegno"></div>
+          <div class="sticker-layer" id="stickerLayer" aria-label="Sticker e testi sul disegno"></div>
+          <canvas id="drawingOverlayCanvas" aria-hidden="true"></canvas>
         </div>
       </main>
 
@@ -36,6 +37,7 @@
         <div class="tool-group">
           <button class="tool-button is-active" id="brushButton" type="button" aria-pressed="true">Penna</button>
           <button class="tool-button" id="eraserButton" type="button" aria-pressed="false">Gomma</button>
+          <button class="tool-button" id="textButton" type="button">Testo</button>
           <button class="tool-button" id="handButton" type="button" aria-pressed="false">Sposta</button>
         </div>
 
@@ -82,12 +84,12 @@
           <button class="tool-button is-active" id="stickersTab" type="button" role="tab" aria-selected="true">Sticker</button>
           <button class="tool-button" id="backgroundsTab" type="button" role="tab" aria-selected="false">Sfondi</button>
         </div>
-        <div class="generate-panel manual-upload-panel">
+        <section class="library-compose-card" aria-label="Aggiungi nuovi elementi">
           <div class="upload-mode-row" aria-label="Dove salvare i nuovi caricamenti">
-            <span class="upload-mode-label">Salva nuovi file:</span>
+            <span class="upload-mode-label">Salva nuovi file</span>
             <label class="upload-mode-option">
               <input id="uploadScopeLocal" name="uploadScope" type="radio" value="local" checked />
-              <span>Locale</span>
+              <span>Solo qui</span>
             </label>
             <label class="upload-mode-option">
               <input id="uploadScopeShared" name="uploadScope" type="radio" value="shared" />
@@ -96,19 +98,21 @@
           </div>
           <div class="upload-grid" aria-label="Caricamento manuale">
             <label class="upload-card drop-zone" id="stickerDropZone">
-              <span class="upload-title">Carica sticker</span>
-              <span class="upload-hint">clicca o trascina qui: verrà convertito in PNG e ritagliato</span>
+              <span class="upload-icon">🧩</span>
+              <span class="upload-title">Sticker</span>
+              <span class="upload-hint">PNG, JPG, WebP o SVG. Lo ritaglio e lo trasformo in PNG.</span>
               <input id="uploadStickerInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" multiple />
             </label>
             <label class="upload-card drop-zone" id="backgroundDropZone">
-              <span class="upload-title">Carica sfondo</span>
-              <span class="upload-hint">clicca o trascina qui: verrà ridimensionato per adattarsi alla tavola</span>
+              <span class="upload-icon">🖼️</span>
+              <span class="upload-title">Sfondo</span>
+              <span class="upload-hint">Meglio orizzontale. Lo adatto alla tavola in qualità alta.</span>
               <input id="uploadBackgroundInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" multiple />
             </label>
-            <button class="ghost-button mini-button" id="clearUploadedAssetsButton" type="button">Svuota locali</button>
+            <button class="ghost-button mini-button clear-local-button" id="clearUploadedAssetsButton" type="button">Svuota locali</button>
           </div>
-          <p id="generateStatus" class="generate-status">Scegli Locale per questo dispositivo, oppure Condiviso per pubblicare nella libreria di tutti i dispositivi. Dopo il primo sync, gli asset condivisi restano disponibili offline.</p>
-        </div>
+          <p id="generateStatus" class="generate-status">Trascina qui le immagini. Prima scegli Solo qui oppure Condiviso.</p>
+        </section>
         <label class="search-control">
           <span>Filtra libreria</span>
           <input id="assetSearch" type="search" placeholder="es. cuore, gatto, cielo, calcio..." autocomplete="off" />
@@ -120,6 +124,33 @@
         <div id="assetGrid" class="asset-grid"></div>
         <p id="emptyAssets" class="empty-state" hidden>Nessun elemento trovato.</p>
       </div>
+    </dialog>
+
+    <dialog id="assetMetaDialog" class="meta-dialog">
+      <form id="assetMetaForm" class="meta-form" method="dialog">
+        <div class="dialog-header meta-header">
+          <h2 id="assetMetaTitle">Dettagli elemento</h2>
+          <button class="icon-button" id="assetMetaCancelX" type="button" aria-label="Annulla">×</button>
+        </div>
+        <div class="meta-body">
+          <div class="meta-preview-wrap">
+            <img id="assetMetaPreview" alt="Anteprima" />
+          </div>
+          <label class="meta-field">
+            <span>Nome</span>
+            <input id="assetMetaName" type="text" maxlength="60" placeholder="es. Gattino buffo" required />
+          </label>
+          <label class="meta-field">
+            <span>Tag per la ricerca</span>
+            <input id="assetMetaTags" type="text" maxlength="180" placeholder="es. gatto, animale, dolce, arancione" />
+          </label>
+          <p class="meta-note">I tag aiutano a trovare subito sticker e sfondi con la ricerca.</p>
+        </div>
+        <div class="meta-actions">
+          <button class="ghost-button" id="assetMetaCancel" type="button">Annulla</button>
+          <button class="tool-button is-active" id="assetMetaSave" type="submit">Salva</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog id="galleryDialog" class="gallery-dialog">
