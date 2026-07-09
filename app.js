@@ -30,6 +30,8 @@ const generateThemeButton = document.querySelector("#generateThemeButton");
 const generateStatus = document.querySelector("#generateStatus");
 const uploadStickerInput = document.querySelector("#uploadStickerInput");
 const uploadBackgroundInput = document.querySelector("#uploadBackgroundInput");
+const stickerDropZone = document.querySelector("#stickerDropZone");
+const backgroundDropZone = document.querySelector("#backgroundDropZone");
 const clearUploadedAssetsButton = document.querySelector("#clearUploadedAssetsButton");
 const stickersTab = document.querySelector("#stickersTab");
 const backgroundsTab = document.querySelector("#backgroundsTab");
@@ -43,9 +45,10 @@ const galleryGrid = document.querySelector("#galleryGrid");
 const emptyGallery = document.querySelector("#emptyGallery");
 
 const DB_NAME = "vicky-draw";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_NAME = "drawings";
 const ASSET_STORE_NAME = "custom-assets";
+const SHARED_LIBRARY_STORE_NAME = "shared-library-cache";
 const AUTOSAVE_ID = "autosave";
 const MAX_HISTORY = 40;
 const MIN_ZOOM = 1;
@@ -55,6 +58,16 @@ const STICKER_MAX_SIZE = 240;
 const ZOOM_STEP = 0.2;
 const EMOJI_FONT = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif";
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const REMOTE_LIBRARY_URL = "https://ma55im0.github.io/vicky-draw-library/library.json";
+const REMOTE_LIBRARY_ORIGIN = new URL(REMOTE_LIBRARY_URL).origin;
+const SHARED_LIBRARY_CACHE_ID = "current";
+
+let sharedLibrary = {
+  version: 0,
+  updatedAt: "",
+  stickers: [],
+  backgrounds: [],
+};
 
 let uploadedLibrary = {
   stickers: [],
@@ -991,11 +1004,11 @@ function getAssetKeywords(item) {
 }
 
 function getAllStickers() {
-  return [...STICKERS, ...uploadedLibrary.stickers];
+  return [...STICKERS, ...sharedLibrary.stickers, ...uploadedLibrary.stickers];
 }
 
 function getAllBackgrounds() {
-  return [...BACKGROUNDS, ...uploadedLibrary.backgrounds];
+  return [...BACKGROUNDS, ...sharedLibrary.backgrounds, ...uploadedLibrary.backgrounds];
 }
 
 function updateLibraryStatus(message) {
@@ -1016,6 +1029,178 @@ function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+
+
+function updateCombinedLibraryStatus(prefix = "") {
+  const sharedCount = sharedLibrary.stickers.length + sharedLibrary.backgrounds.length;
+  const localCount = uploadedLibrary.stickers.length + uploadedLibrary.backgrounds.length;
+  const message = `Condivisi: ${sharedLibrary.stickers.length} sticker, ${sharedLibrary.backgrounds.length} sfondi. Locali: ${uploadedLibrary.stickers.length} sticker, ${uploadedLibrary.backgrounds.length} sfondi.`;
+  updateLibraryStatus(prefix ? `${prefix} ${message}` : message);
+  return { sharedCount, localCount };
+}
+
+function isAllowedSharedAsset(asset) {
+  if (!asset || typeof asset !== "object") {
+    return false;
+  }
+  const category = String(asset.category || "").toLowerCase();
+  const pack = String(asset.pack || "").toLowerCase();
+  const source = String(asset.source || "").toLowerCase();
+  if (asset.generated === true || asset.imported === true) {
+    return false;
+  }
+  if (["generated", "imported", "iconify", "ai"].includes(category)) {
+    return false;
+  }
+  if (pack.startsWith("generated-") || source === "iconify") {
+    return false;
+  }
+  return true;
+}
+
+function makeSharedAssetUrl(src) {
+  if (!src || typeof src !== "string") {
+    return null;
+  }
+  if (src.startsWith("data:image/")) {
+    return src;
+  }
+  try {
+    const url = new URL(src, REMOTE_LIBRARY_URL);
+    if (url.protocol !== "https:" || url.origin !== REMOTE_LIBRARY_ORIGIN) {
+      return null;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fetchAsDataUrl(url) {
+  if (!url || url.startsWith("data:image/")) {
+    return url;
+  }
+  const response = await fetch(url, { cache: "no-cache" });
+  if (!response.ok) {
+    throw new Error(`Asset non disponibile: ${response.status}`);
+  }
+  return blobToDataUrl(await response.blob());
+}
+
+async function normalizeSharedAsset(asset, kind) {
+  if (!isAllowedSharedAsset(asset)) {
+    return null;
+  }
+  const id = String(asset.id || asset.name || asset.title || "").trim();
+  const name = String(asset.name || asset.title || id || "Elemento").trim();
+  const url = makeSharedAssetUrl(asset.src);
+  if (!id || !name || !url) {
+    return null;
+  }
+  const tags = Array.isArray(asset.tags) ? asset.tags.map(String) : [];
+  const normalized = {
+    id: `shared:${id}`,
+    remoteId: id,
+    kind: kind === "stickers" ? "sticker" : "background",
+    type: "image",
+    name,
+    title: name,
+    category: String(asset.category || "shared"),
+    keywords: `${asset.keywords || ""} ${tags.join(" ")} ${asset.category || ""}`.trim(),
+    tags,
+    src: url,
+    dataUrl: null,
+    isShared: true,
+    source: "shared-library",
+  };
+  normalized.dataUrl = await fetchAsDataUrl(url).catch(() => null);
+  return normalized;
+}
+
+async function normalizeSharedLibrary(rawLibrary) {
+  const rawStickers = Array.isArray(rawLibrary?.stickers) ? rawLibrary.stickers : [];
+  const rawBackgrounds = Array.isArray(rawLibrary?.backgrounds) ? rawLibrary.backgrounds : [];
+  const stickers = [];
+  const backgrounds = [];
+
+  for (const sticker of rawStickers.slice(0, 250)) {
+    const normalized = await normalizeSharedAsset(sticker, "stickers");
+    if (normalized) {
+      stickers.push(normalized);
+    }
+  }
+  for (const background of rawBackgrounds.slice(0, 160)) {
+    const normalized = await normalizeSharedAsset(background, "backgrounds");
+    if (normalized) {
+      backgrounds.push(normalized);
+    }
+  }
+  return {
+    version: Number(rawLibrary?.version) || 0,
+    updatedAt: String(rawLibrary?.updatedAt || ""),
+    stickers,
+    backgrounds,
+  };
+}
+
+async function readSharedLibraryCache() {
+  try {
+    const record = await requestFromStore("readonly", (store) => store.get(SHARED_LIBRARY_CACHE_ID), SHARED_LIBRARY_STORE_NAME);
+    return record?.library || null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveSharedLibraryCache(library) {
+  try {
+    await commitToStore((store) => store.put({ id: SHARED_LIBRARY_CACHE_ID, library, cachedAt: new Date().toISOString() }), SHARED_LIBRARY_STORE_NAME);
+  } catch {
+    // Se lo spazio offline è pieno, l'app continua a funzionare online e con i caricamenti locali.
+  }
+}
+
+async function loadSharedLibrary(options = {}) {
+  const { force = false } = options;
+  const cached = await readSharedLibraryCache();
+
+  if (cached && !force) {
+    sharedLibrary = cached;
+    updateCombinedLibraryStatus("Offline/cache pronta.");
+    renderAssetGrid();
+  }
+
+  try {
+    updateLibraryStatus(force ? "Aggiorno la libreria condivisa…" : "Controllo la libreria condivisa…");
+    const response = await fetch(`${REMOTE_LIBRARY_URL}?t=${Date.now()}`, { cache: "no-cache" });
+    if (!response.ok) {
+      throw new Error(`Libreria non disponibile: ${response.status}`);
+    }
+    const rawLibrary = await response.json();
+    sharedLibrary = await normalizeSharedLibrary(rawLibrary);
+    await saveSharedLibraryCache(sharedLibrary);
+    updateCombinedLibraryStatus("Libreria condivisa aggiornata.");
+    renderAssetGrid();
+  } catch {
+    if (cached) {
+      sharedLibrary = cached;
+      updateCombinedLibraryStatus("Offline: uso la libreria condivisa salvata.");
+      renderAssetGrid();
+    } else {
+      sharedLibrary = { version: 0, updatedAt: "", stickers: [], backgrounds: [] };
+      updateCombinedLibraryStatus("Libreria condivisa non raggiungibile.");
+    }
+  }
+}
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -1046,7 +1231,7 @@ async function loadUploadedAssets() {
       stickers: records.filter((item) => item.kind === "sticker"),
       backgrounds: records.filter((item) => item.kind === "background"),
     };
-    updateLibraryStatus(`Caricati: ${uploadedLibrary.stickers.length} sticker, ${uploadedLibrary.backgrounds.length} sfondi.`);
+    updateCombinedLibraryStatus();
     renderAssetGrid();
   } catch {
     uploadedLibrary = { stickers: [], backgrounds: [] };
@@ -1054,9 +1239,11 @@ async function loadUploadedAssets() {
   }
 }
 
-async function loadRemoteLibrary() {
+async function loadRemoteLibrary(options = {}) {
   localStorage.removeItem("vicky-draw-remote-library-v1");
   await loadUploadedAssets();
+  await loadSharedLibrary(options);
+  updateCombinedLibraryStatus();
 }
 
 async function handleAssetUpload(files, kind) {
@@ -1106,14 +1293,14 @@ async function handleAssetUpload(files, kind) {
   updateGenerateStatus(
     skipped
       ? `Caricati ${imported} elementi. ${skipped} file saltati perché non validi o troppo grandi.`
-      : `Caricati ${imported} elementi nella libreria locale.`,
+      : `Caricati ${imported} elementi nella libreria locale di questo dispositivo.`,
     imported ? "success" : "warn",
   );
-  setStatus(imported ? "Libreria manuale aggiornata" : "Nessun file caricato");
+  setStatus(imported ? "Libreria locale aggiornata" : "Nessun file caricato");
 }
 
 async function deleteUploadedAsset(assetId, label = "questo elemento") {
-  const confirmed = window.confirm(`Vuoi eliminare ${label} dalla libreria locale?`);
+  const confirmed = window.confirm(`Vuoi eliminare ${label} dalla libreria locale di questo dispositivo?`);
   if (!confirmed) {
     return;
   }
@@ -1716,10 +1903,17 @@ function renderAssetGrid() {
       name.textContent = getAssetName(record);
       button.append(name);
 
+      if (record.isShared) {
+        const badge = document.createElement("span");
+        badge.className = "asset-badge asset-badge-shared";
+        badge.textContent = "Condiviso";
+        button.append(badge);
+      }
+
       if (record.isUploaded) {
         const badge = document.createElement("span");
         badge.className = "asset-badge";
-        badge.textContent = "Caricato";
+        badge.textContent = "Locale";
         button.append(badge);
 
         const deleteButton = document.createElement("span");
@@ -1750,10 +1944,17 @@ function renderAssetGrid() {
       name.textContent = getAssetName(record);
       button.append(preview, name);
 
+      if (record.isShared) {
+        const badge = document.createElement("span");
+        badge.className = "asset-badge asset-badge-shared";
+        badge.textContent = "Condiviso";
+        button.append(badge);
+      }
+
       if (record.isUploaded) {
         const badge = document.createElement("span");
         badge.className = "asset-badge";
-        badge.textContent = "Caricato";
+        badge.textContent = "Locale";
         button.append(badge);
 
         const deleteButton = document.createElement("span");
@@ -1800,6 +2001,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(ASSET_STORE_NAME)) {
         db.createObjectStore(ASSET_STORE_NAME, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(SHARED_LIBRARY_STORE_NAME)) {
+        db.createObjectStore(SHARED_LIBRARY_STORE_NAME, { keyPath: "id" });
       }
     };
 
@@ -2067,6 +2271,39 @@ brushButton.addEventListener("click", () => setTool("brush"));
 eraserButton.addEventListener("click", () => setTool("eraser"));
 handButton.addEventListener("click", () => setTool("hand"));
 
+
+function setupDropZone(zone, kind) {
+  if (!zone) {
+    return;
+  }
+  const stop = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  ["dragenter", "dragover"].forEach((type) => {
+    zone.addEventListener(type, (event) => {
+      stop(event);
+      zone.classList.add("is-drag-over");
+    });
+  });
+
+  ["dragleave", "drop"].forEach((type) => {
+    zone.addEventListener(type, (event) => {
+      stop(event);
+      zone.classList.remove("is-drag-over");
+    });
+  });
+
+  zone.addEventListener("drop", async (event) => {
+    const files = event.dataTransfer?.files;
+    await handleAssetUpload(files, kind);
+  });
+}
+
+setupDropZone(stickerDropZone, "sticker");
+setupDropZone(backgroundDropZone, "background");
+
 assetsButton.addEventListener("click", () => {
   assetSearch.value = "";
   setAssetKind("stickers");
@@ -2088,7 +2325,7 @@ uploadBackgroundInput?.addEventListener("change", async () => {
 clearUploadedAssetsButton?.addEventListener("click", clearUploadedAssets);
 refreshLibraryButton?.addEventListener("click", async () => {
   refreshLibraryButton.disabled = true;
-  await loadUploadedAssets();
+  await loadRemoteLibrary({ force: true });
   refreshLibraryButton.disabled = false;
 });
 
@@ -2138,8 +2375,8 @@ async function initApp() {
   resizeCanvas();
   applyBackground("white", { pushToHistory: false, autosave: false });
   applyViewTransform();
-  updateGenerateStatus("Carica manualmente sticker e sfondi approvati: restano sul dispositivo e funzionano offline.");
-  await loadUploadedAssets();
+  updateGenerateStatus("Libreria condivisa da GitHub + caricamenti locali. Trascina immagini nei riquadri per aggiungerle solo a questo dispositivo.");
+  await loadRemoteLibrary();
   await loadAutosave();
   updateHistoryButtons();
   registerServiceWorker();

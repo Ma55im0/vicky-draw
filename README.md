@@ -58,3 +58,11 @@ http://localhost:5173
 - Removed online/AI generation.
 - Added manual upload of stickers and backgrounds into IndexedDB.
 - Uploaded assets can be deleted instantly from the UI and work offline on the same device.
+
+
+## v8 shared library
+- Legge `https://ma55im0.github.io/vicky-draw-library/library.json`.
+- Ignora gli asset generati/importati automaticamente delle vecchie prove.
+- Salva la libreria condivisa in IndexedDB per l'uso offline.
+- Mantiene il caricamento locale manuale e aggiunge drag and drop.
+- Non usa Vercel API, OpenAI, Iconify o generazione procedurale.

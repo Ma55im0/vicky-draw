@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#ff7aa8" />
     <meta name="referrer" content="no-referrer" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://ma55im0.github.io data: blob:; connect-src 'self' https://ma55im0.github.io; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests" />
     <meta name="description" content="Una piccola app offline per disegnare nel browser, con sticker e sfondi aggiornabili da una libreria curata." />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
@@ -84,27 +84,27 @@
         </div>
         <div class="generate-panel manual-upload-panel">
           <div class="upload-grid" aria-label="Caricamento manuale">
-            <label class="upload-card">
+            <label class="upload-card drop-zone" id="stickerDropZone">
               <span class="upload-title">Carica sticker</span>
-              <span class="upload-hint">PNG, SVG, WebP o JPG</span>
+              <span class="upload-hint">clicca o trascina qui immagini PNG, SVG, WebP o JPG</span>
               <input id="uploadStickerInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" multiple />
             </label>
-            <label class="upload-card">
+            <label class="upload-card drop-zone" id="backgroundDropZone">
               <span class="upload-title">Carica sfondo</span>
-              <span class="upload-hint">meglio orizzontale</span>
+              <span class="upload-hint">clicca o trascina qui, meglio immagini orizzontali</span>
               <input id="uploadBackgroundInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" multiple />
             </label>
-            <button class="ghost-button mini-button" id="clearUploadedAssetsButton" type="button">Svuota caricati</button>
+            <button class="ghost-button mini-button" id="clearUploadedAssetsButton" type="button">Svuota locali</button>
           </div>
-          <p id="generateStatus" class="generate-status">Modalità gratuita: carichi tu sticker e sfondi approvati. Restano sul dispositivo e funzionano offline.</p>
+          <p id="generateStatus" class="generate-status">Libreria condivisa sincronizzata da GitHub + caricamenti locali con drag and drop. Tutto resta disponibile offline dopo il primo caricamento.</p>
         </div>
         <label class="search-control">
           <span>Filtra libreria</span>
           <input id="assetSearch" type="search" placeholder="es. cuore, gatto, cielo, calcio..." autocomplete="off" />
         </label>
         <div class="library-row">
-          <p id="libraryStatus">Libreria caricata dal dispositivo.</p>
-          <button class="ghost-button mini-button" id="refreshLibraryButton" type="button">Ricarica</button>
+          <p id="libraryStatus">Libreria in caricamento…</p>
+          <button class="ghost-button mini-button" id="refreshLibraryButton" type="button">Aggiorna libreria</button>
         </div>
         <div id="assetGrid" class="asset-grid"></div>
         <p id="emptyAssets" class="empty-state" hidden>Nessun elemento trovato.</p>
