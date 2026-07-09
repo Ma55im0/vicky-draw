@@ -10,6 +10,7 @@ const stickerLayer = document.querySelector("#stickerLayer");
 const brushButton = document.querySelector("#brushButton");
 const eraserButton = document.querySelector("#eraserButton");
 const textButton = document.querySelector("#textButton");
+const fontPicker = document.querySelector("#fontPicker");
 const handButton = document.querySelector("#handButton");
 const colorPicker = document.querySelector("#colorPicker");
 const sizePicker = document.querySelector("#sizePicker");
@@ -22,6 +23,13 @@ const redoButton = document.querySelector("#redoButton");
 const saveButton = document.querySelector("#saveButton");
 const galleryButton = document.querySelector("#galleryButton");
 const exportButton = document.querySelector("#exportButton");
+const exportDialog = document.querySelector("#exportDialog");
+const exportForm = document.querySelector("#exportForm");
+const exportType = document.querySelector("#exportType");
+const exportFormat = document.querySelector("#exportFormat");
+const exportOrientation = document.querySelector("#exportOrientation");
+const exportCancel = document.querySelector("#exportCancel");
+const exportCancelX = document.querySelector("#exportCancelX");
 const clearButton = document.querySelector("#clearButton");
 const installButton = document.querySelector("#installButton");
 const saveStatus = document.querySelector("#saveStatus");
@@ -71,6 +79,15 @@ const STICKER_MIN_SIZE = 24;
 const STICKER_MAX_SIZE = 320;
 const ZOOM_STEP = 0.2;
 const EMOJI_FONT = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif";
+const TEXT_FONTS = {
+  rounded: 'ui-rounded, "SF Pro Rounded", "Segoe UI Rounded", "Trebuchet MS", system-ui, sans-serif',
+  comic: '"Comic Sans MS", "Comic Sans", cursive, sans-serif',
+  hand: '"Segoe Print", "Bradley Hand", "Comic Sans MS", cursive, sans-serif',
+  sans: 'Inter, "Segoe UI", Arial, sans-serif',
+  serif: 'Georgia, "Times New Roman", serif',
+  mono: '"Courier New", Courier, monospace',
+};
+const DEFAULT_TEXT_FONT = "rounded";
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const REMOTE_LIBRARY_URL = "https://ma55im0.github.io/vicky-draw-library/library.json";
 const REMOTE_LIBRARY_ORIGIN = new URL(REMOTE_LIBRARY_URL).origin;
@@ -79,10 +96,14 @@ const SHARED_DELETE_URL = "https://vicky-draw-api.vercel.app/api/delete-asset";
 const SHARED_LIBRARY_CACHE_ID = "current";
 const ADMIN_PIN_STORAGE_KEY = "vicky-draw-admin-pin";
 const PENDING_SHARED_STORAGE_KEY = "vicky-draw-pending-shared-assets-v1";
+const EXPORT_SPECS = {
+  a4: { label: "A4", mmWidth: 210, mmHeight: 297, pxPortrait: [2480, 3508], pxLandscape: [3508, 2480] },
+  postcard: { label: "Cartolina 10x15", mmWidth: 100, mmHeight: 150, pxPortrait: [1181, 1772], pxLandscape: [1772, 1181] },
+};
 const STICKER_OUTPUT_MAX_SIZE = 900;
-const BACKGROUND_OUTPUT_WIDTH = 2400;
-const BACKGROUND_OUTPUT_MAX_HEIGHT = 1800;
-const BACKGROUND_UPLOAD_MAX_BYTES = 2800000;
+const BACKGROUND_OUTPUT_WIDTH = 2800;
+const BACKGROUND_OUTPUT_MAX_HEIGHT = 2100;
+const BACKGROUND_UPLOAD_MAX_BYTES = 3300000;
 
 let sharedLibrary = {
   version: 0,
@@ -691,6 +712,13 @@ function getBoardSize() {
   };
 }
 
+function currentBoardAspect() {
+  const size = getBoardSize();
+  const width = Number(size.width) || canvas.width || 1;
+  const height = Number(size.height) || canvas.height || 1;
+  return clamp(width / Math.max(1, height), 0.55, 2.4);
+}
+
 function clientToCanvasPoint(event) {
   const rect = canvas.getBoundingClientRect();
   return {
@@ -845,13 +873,47 @@ function setTool(tool) {
   brushButton.classList.toggle("is-active", tool === "brush");
   eraserButton.classList.toggle("is-active", tool === "eraser");
   handButton.classList.toggle("is-active", tool === "hand");
+  textButton?.classList.toggle("is-active", tool === "text");
   brushButton.setAttribute("aria-pressed", String(tool === "brush"));
   eraserButton.setAttribute("aria-pressed", String(tool === "eraser"));
   handButton.setAttribute("aria-pressed", String(tool === "hand"));
+  textButton?.setAttribute("aria-pressed", String(tool === "text"));
   board.classList.toggle("is-hand-mode", tool === "hand");
   board.classList.toggle("is-draw-mode", tool === "brush" || tool === "eraser");
   handPointers.clear();
   handGesture = null;
+}
+
+function getTextFontKey(value) {
+  return TEXT_FONTS[value] ? value : DEFAULT_TEXT_FONT;
+}
+
+function getTextFontFamily(value) {
+  return TEXT_FONTS[getTextFontKey(value)];
+}
+
+function getSelectedTextFontKey() {
+  return getTextFontKey(fontPicker?.value || DEFAULT_TEXT_FONT);
+}
+
+function syncFontPickerWithSelection() {
+  if (!fontPicker) {
+    return;
+  }
+  const selected = stickers.find((item) => item.id === activeStickerId && item.type === "text");
+  fontPicker.value = getTextFontKey(selected?.fontKey || fontPicker.value || DEFAULT_TEXT_FONT);
+}
+
+function applyFontToActiveText() {
+  const selected = stickers.find((item) => item.id === activeStickerId && item.type === "text");
+  if (!selected) {
+    return;
+  }
+  pushHistory();
+  selected.fontKey = getSelectedTextFontKey();
+  renderStickers();
+  scheduleAutosave();
+  setStatus("Font del testo aggiornato");
 }
 
 function drawLine(from, to) {
@@ -1652,7 +1714,7 @@ async function canvasToHighQualityBackgroundBlob(sourceCanvas) {
     working = downscaleCanvas(working, 0.86);
   }
 
-  const blob = await canvasToBlob(working, "image/jpeg", 0.78);
+  const blob = await canvasToBlob(working, "image/jpeg", 0.82);
   return { blob, width: working.width, height: working.height };
 }
 
@@ -2302,7 +2364,7 @@ function drawTextElementOnContext(targetCtx, element, scaleX, scaleY) {
   const lines = splitTextLines(element.value);
   const fontSize = element.size * Math.min(scaleX, scaleY);
   const lineHeight = fontSize * 1.16;
-  targetCtx.font = `800 ${fontSize}px ui-rounded, "Comic Sans MS", "Trebuchet MS", system-ui, sans-serif`;
+  targetCtx.font = `800 ${fontSize}px ${getTextFontFamily(element.fontKey)}`;
   targetCtx.textAlign = "center";
   targetCtx.textBaseline = "middle";
   targetCtx.lineJoin = "round";
@@ -2319,10 +2381,10 @@ function drawTextElementOnContext(targetCtx, element, scaleX, scaleY) {
   });
 }
 
-async function createCompositeDataUrl() {
+async function createCompositeCanvas(outputWidth = canvas.width, outputHeight = canvas.height) {
   const output = document.createElement("canvas");
-  output.width = canvas.width;
-  output.height = canvas.height;
+  output.width = Math.max(1, Math.round(outputWidth));
+  output.height = Math.max(1, Math.round(outputHeight));
   const out = output.getContext("2d");
   const size = getBoardSize();
   const scaleX = output.width / size.width;
@@ -2361,6 +2423,11 @@ async function createCompositeDataUrl() {
   out.globalCompositeOperation = "source-over";
   out.drawImage(overlayCanvas, 0, 0, output.width, output.height);
 
+  return output;
+}
+
+async function createCompositeDataUrl() {
+  const output = await createCompositeCanvas();
   return output.toDataURL("image/png");
 }
 
@@ -2409,6 +2476,7 @@ function renderStickers() {
     } else if (sticker.type === "text") {
       glyph.textContent = sticker.value || "Testo";
       glyph.style.color = sticker.color || colorPicker.value;
+      glyph.style.fontFamily = getTextFontFamily(sticker.fontKey);
     } else {
       glyph.textContent = sticker.value;
     }
@@ -2425,12 +2493,27 @@ function renderStickers() {
     rotateHandle.textContent = "⟳";
     rotateHandle.setAttribute("aria-label", "Ruota sticker");
 
+    const deleteHandle = document.createElement("button");
+    deleteHandle.type = "button";
+    deleteHandle.className = "sticker-delete";
+    deleteHandle.textContent = "×";
+    deleteHandle.setAttribute("aria-label", sticker.type === "text" ? "Elimina testo" : "Elimina sticker");
+
     element.addEventListener("pointerdown", (event) => beginStickerMove(event, sticker.id));
     element.addEventListener("dblclick", (event) => editTextElement(event, sticker.id));
     resizeHandle.addEventListener("pointerdown", (event) => beginStickerResize(event, sticker.id));
     rotateHandle.addEventListener("pointerdown", (event) => beginStickerRotate(event, sticker.id));
+    deleteHandle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    deleteHandle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      deleteBoardElement(sticker.id);
+    });
 
-    element.append(glyph, resizeHandle, rotateHandle);
+    element.append(glyph, resizeHandle, rotateHandle, deleteHandle);
     stickerLayer.append(element);
   }
 }
@@ -2446,6 +2529,7 @@ function beginStickerMove(event, stickerId) {
   pushHistory();
   activeStickerId = stickerId;
   updateStickerSelection();
+  syncFontPickerWithSelection();
   const point = clientToBoardPoint(event);
   stickerAction = {
     type: "move",
@@ -2470,6 +2554,7 @@ function beginStickerResize(event, stickerId) {
   pushHistory();
   activeStickerId = stickerId;
   updateStickerSelection();
+  syncFontPickerWithSelection();
   const point = clientToBoardPoint(event);
   stickerAction = {
     type: "resize",
@@ -2493,6 +2578,7 @@ function beginStickerRotate(event, stickerId) {
   pushHistory();
   activeStickerId = stickerId;
   updateStickerSelection();
+  syncFontPickerWithSelection();
   const point = clientToBoardPoint(event);
   const startAngle = Math.atan2(point.y - sticker.y, point.x - sticker.x);
   stickerAction = {
@@ -2550,6 +2636,24 @@ function clearActiveSticker() {
   }
   activeStickerId = null;
   updateStickerSelection();
+  syncFontPickerWithSelection();
+}
+
+function deleteBoardElement(stickerId = activeStickerId) {
+  const index = stickers.findIndex((item) => item.id === stickerId);
+  if (index < 0) {
+    return;
+  }
+  const removed = stickers[index];
+  pushHistory();
+  stickers.splice(index, 1);
+  if (activeStickerId === stickerId) {
+    activeStickerId = null;
+  }
+  renderStickers();
+  syncFontPickerWithSelection();
+  scheduleAutosave();
+  setStatus(removed.type === "text" ? "Testo eliminato" : "Sticker eliminato");
 }
 
 function addTextElement() {
@@ -2566,6 +2670,7 @@ function addTextElement() {
     value: text.trim().slice(0, 120),
     name: "Testo",
     color: colorPicker.value,
+    fontKey: getSelectedTextFontKey(),
     x: center.x,
     y: center.y,
     size: 40,
@@ -2574,6 +2679,7 @@ function addTextElement() {
   stickers.push(element);
   activeStickerId = element.id;
   setTool("hand");
+  syncFontPickerWithSelection();
   renderStickers();
   scheduleAutosave();
   setStatus("Testo aggiunto");
@@ -2594,6 +2700,7 @@ function editTextElement(event, stickerId) {
   element.value = nextText.trim().slice(0, 120);
   activeStickerId = stickerId;
   renderStickers();
+  syncFontPickerWithSelection();
   scheduleAutosave();
 }
 
@@ -2629,6 +2736,7 @@ function addSticker(stickerDefinition) {
   stickers.push(sticker);
   activeStickerId = sticker.id;
   setTool("hand");
+  syncFontPickerWithSelection();
   renderStickers();
   scheduleAutosave();
   setStatus(`Sticker ${sticker.name.toLowerCase()} aggiunto`);
@@ -3037,13 +3145,167 @@ function clearCanvas() {
   scheduleAutosave();
 }
 
-async function exportPNG() {
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  link.download = `vicky-draw-${stamp}.png`;
-  link.href = await createCompositeDataUrl();
+  link.download = filename;
+  link.href = url;
   link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1200);
+}
+
+function dataUrlToBytes(dataUrl) {
+  const base64 = String(dataUrl || "").split(",")[1] || "";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function concatPdfParts(parts) {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.length;
+  }
+  return output;
+}
+
+function makeSimplePdfFromJpeg(jpegBytes, imageWidth, imageHeight, pageWidthPt, pageHeightPt) {
+  const encoder = new TextEncoder();
+  const parts = [];
+  const offsets = [0];
+  let length = 0;
+
+  const addString = (value) => {
+    const bytes = encoder.encode(value);
+    parts.push(bytes);
+    length += bytes.length;
+  };
+  const addBytes = (bytes) => {
+    parts.push(bytes);
+    length += bytes.length;
+  };
+  const startObject = (number) => {
+    offsets[number] = length;
+    addString(`${number} 0 obj\n`);
+  };
+
+  addString("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
+
+  startObject(1);
+  addString("<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+  startObject(2);
+  addString("<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+
+  startObject(3);
+  addString(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidthPt.toFixed(2)} ${pageHeightPt.toFixed(2)}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`);
+
+  startObject(4);
+  addString(`<< /Type /XObject /Subtype /Image /Width ${imageWidth} /Height ${imageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+  addBytes(jpegBytes);
+  addString("\nendstream\nendobj\n");
+
+  const contents = `q\n${pageWidthPt.toFixed(2)} 0 0 ${pageHeightPt.toFixed(2)} 0 0 cm\n/Im0 Do\nQ\n`;
+  startObject(5);
+  addString(`<< /Length ${encoder.encode(contents).length} >>\nstream\n${contents}endstream\nendobj\n`);
+
+  const xrefOffset = length;
+  addString("xref\n0 6\n0000000000 65535 f \n");
+  for (let i = 1; i <= 5; i += 1) {
+    addString(`${String(offsets[i]).padStart(10, "0")} 00000 n \n`);
+  }
+  addString(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
+
+  return new Blob([concatPdfParts(parts)], { type: "application/pdf" });
+}
+
+function getExportSpec() {
+  const format = exportFormat?.value || "a4";
+  const orientation = exportOrientation?.value || "landscape";
+  const spec = EXPORT_SPECS[format] || EXPORT_SPECS.a4;
+  const landscape = orientation === "landscape";
+  const [pxWidth, pxHeight] = landscape ? spec.pxLandscape : spec.pxPortrait;
+  const pageMmWidth = landscape ? spec.mmHeight : spec.mmWidth;
+  const pageMmHeight = landscape ? spec.mmWidth : spec.mmHeight;
+  const pageWidthPt = pageMmWidth * 72 / 25.4;
+  const pageHeightPt = pageMmHeight * 72 / 25.4;
+  return { format, orientation, label: spec.label, pxWidth, pxHeight, pageWidthPt, pageHeightPt };
+}
+
+async function createPrintCanvas(spec) {
+  const out = makeCanvas(spec.pxWidth, spec.pxHeight);
+  const outCtx = out.getContext("2d");
+  outCtx.imageSmoothingEnabled = true;
+  outCtx.imageSmoothingQuality = "high";
+  outCtx.fillStyle = "#ffffff";
+  outCtx.fillRect(0, 0, out.width, out.height);
+
+  const margin = Math.round(Math.min(out.width, out.height) * 0.035);
+  const boxWidth = out.width - margin * 2;
+  const boxHeight = out.height - margin * 2;
+  const sourceRatio = currentBoardAspect();
+  const boxRatio = boxWidth / boxHeight || 1;
+  let drawWidth = boxWidth;
+  let drawHeight = boxHeight;
+  if (sourceRatio > boxRatio) {
+    drawHeight = boxWidth / sourceRatio;
+  } else {
+    drawWidth = boxHeight * sourceRatio;
+  }
+  const boardCanvas = await createCompositeCanvas(Math.round(drawWidth), Math.round(drawHeight));
+  const x = Math.round((out.width - drawWidth) / 2);
+  const y = Math.round((out.height - drawHeight) / 2);
+  outCtx.drawImage(boardCanvas, x, y);
+  return out;
+}
+
+async function exportPrintFile() {
+  const spec = getExportSpec();
+  const type = exportType?.value || "jpeg";
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const canvasForPrint = await createPrintCanvas(spec);
+  const baseName = `vicky-draw-${spec.format}-${spec.orientation}-${stamp}`;
+
+  if (type === "pdf") {
+    const jpegBlob = await canvasToBlob(canvasForPrint, "image/jpeg", 0.94);
+    const jpegDataUrl = await blobToDataUrl(jpegBlob);
+    const pdf = makeSimplePdfFromJpeg(dataUrlToBytes(jpegDataUrl), canvasForPrint.width, canvasForPrint.height, spec.pageWidthPt, spec.pageHeightPt);
+    downloadBlob(pdf, `${baseName}.pdf`);
+    setStatus(`PDF ${spec.label} esportato`);
+    return;
+  }
+
+  if (type === "png") {
+    const blob = await canvasToBlob(canvasForPrint, "image/png");
+    downloadBlob(blob, `${baseName}.png`);
+    setStatus(`PNG ${spec.label} esportato`);
+    return;
+  }
+
+  const blob = await canvasToBlob(canvasForPrint, "image/jpeg", 0.94);
+  downloadBlob(blob, `${baseName}.jpg`);
+  setStatus(`JPEG ${spec.label} esportato`);
+}
+
+async function exportPNG() {
+  const blob = await canvasToBlob(await createCompositeCanvas(), "image/png");
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  downloadBlob(blob, `vicky-draw-${stamp}.png`);
   setStatus("PNG esportato");
+}
+
+function openExportDialog() {
+  if (!exportDialog) {
+    exportPrintFile();
+    return;
+  }
+  exportDialog.showModal();
 }
 
 function registerServiceWorker() {
@@ -3077,6 +3339,7 @@ brushButton.addEventListener("click", () => setTool("brush"));
 eraserButton.addEventListener("click", () => setTool("eraser"));
 textButton?.addEventListener("click", addTextElement);
 handButton.addEventListener("click", () => setTool("hand"));
+fontPicker?.addEventListener("change", applyFontToActiveText);
 
 
 function setupDropZone(zone, kind) {
@@ -3160,7 +3423,19 @@ galleryButton.addEventListener("click", async () => {
   await renderGallery();
   galleryDialog.showModal();
 });
-exportButton.addEventListener("click", exportPNG);
+exportButton.addEventListener("click", openExportDialog);
+exportForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  exportForm.querySelector("button[type='submit']")?.setAttribute("disabled", "disabled");
+  try {
+    await exportPrintFile();
+    exportDialog?.close();
+  } finally {
+    exportForm.querySelector("button[type='submit']")?.removeAttribute("disabled");
+  }
+});
+exportCancel?.addEventListener("click", () => exportDialog?.close());
+exportCancelX?.addEventListener("click", () => exportDialog?.close());
 clearButton.addEventListener("click", clearCanvas);
 
 canvas.addEventListener("pointerdown", beginDrawing);
@@ -3178,6 +3453,16 @@ document.addEventListener("pointerdown", (event) => {
   clearActiveSticker();
 }, { capture: true });
 
+document.addEventListener("keydown", (event) => {
+  if (!activeStickerId || assetMetaDialog?.open || assetsDialog?.open || galleryDialog?.open || exportDialog?.open) {
+    return;
+  }
+  if (event.key === "Delete" || event.key === "Backspace") {
+    event.preventDefault();
+    deleteBoardElement(activeStickerId);
+  }
+});
+
 window.addEventListener("pointermove", continueStickerAction, { passive: false });
 window.addEventListener("pointerup", finishStickerAction, { passive: false });
 window.addEventListener("pointercancel", finishStickerAction, { passive: false });
@@ -3193,6 +3478,9 @@ async function initApp() {
   resizeCanvas();
   applyBackground("white", { pushToHistory: false, autosave: false });
   applyViewTransform();
+  if (fontPicker) {
+    fontPicker.value = DEFAULT_TEXT_FONT;
+  }
   updateGenerateStatus("Trascina immagini nei riquadri. Scegli Solo qui o Condiviso prima del caricamento.");
   await loadRemoteLibrary();
   await loadAutosave();
