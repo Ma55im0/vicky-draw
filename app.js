@@ -1725,6 +1725,53 @@ async function postSharedAsset(endpoint, body) {
   return payload;
 }
 
+function normalizeSharedRemoteId(value) {
+  return String(value || "")
+    .replace(/^shared:/, "")
+    .trim();
+}
+
+function sharedAssetPath(value) {
+  let raw = String(value || "").trim();
+  if (!raw || raw.startsWith("data:image/")) {
+    return "";
+  }
+  try {
+    const url = new URL(raw, REMOTE_LIBRARY_URL);
+    raw = url.pathname || "";
+  } catch {
+    raw = raw.split("#")[0].split("?")[0];
+  }
+  raw = decodeURIComponent(raw)
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .split("#")[0]
+    .split("?")[0];
+  const marker = "vicky-draw-library/";
+  const index = raw.indexOf(marker);
+  if (index >= 0) {
+    raw = raw.slice(index + marker.length);
+  }
+  return raw.replace(/^\/+/, "");
+}
+
+function sameSharedAsset(a, b) {
+  const aId = normalizeSharedRemoteId(a?.remoteId || a?.id);
+  const bId = normalizeSharedRemoteId(b?.remoteId || b?.id);
+  const aPath = sharedAssetPath(a?.src || a?.url);
+  const bPath = sharedAssetPath(b?.src || b?.url);
+  return (aId && bId && aId === bId) || (aPath && bPath && aPath === bPath);
+}
+
+function removeSharedAssetInMemory(record) {
+  sharedLibrary.stickers = sharedLibrary.stickers.filter((item) => !sameSharedAsset(item, record));
+  sharedLibrary.backgrounds = sharedLibrary.backgrounds.filter((item) => !sameSharedAsset(item, record));
+  const remoteId = normalizeSharedRemoteId(record?.remoteId || record?.id);
+  if (remoteId) {
+    forgetPendingSharedAsset(remoteId);
+  }
+}
+
 function normalizeApiSharedAsset(asset, kind, dataUrl = null) {
   const remoteId = String(asset.id || "");
   const name = String(asset.name || asset.title || remoteId || "Elemento");
@@ -1924,24 +1971,31 @@ async function deleteSharedAsset(record) {
     return;
   }
 
+  const remoteId = normalizeSharedRemoteId(record.remoteId || record.id);
+  const path = sharedAssetPath(record.src);
+  updateGenerateStatus(`Elimino ${label} dalla libreria condivisa…`, "info");
+
   try {
-    await postSharedAsset(SHARED_DELETE_URL, {
+    const result = await postSharedAsset(SHARED_DELETE_URL, {
       pin,
-      id: record.remoteId,
+      id: remoteId,
       src: record.src,
+      path,
     });
-    sharedLibrary.stickers = sharedLibrary.stickers.filter((item) => item.remoteId !== record.remoteId);
-    sharedLibrary.backgrounds = sharedLibrary.backgrounds.filter((item) => item.remoteId !== record.remoteId);
-    forgetPendingSharedAsset(record.remoteId);
+
+    removeSharedAssetInMemory(record);
     if (currentBackgroundId === record.id) {
       applyBackground("white", { pushToHistory: true, autosave: true });
     }
     await saveSharedLibraryCache(sharedLibrary);
     renderAssetGrid();
     updateCombinedLibraryStatus(`${label} eliminato.`);
-    updateGenerateStatus(`${label} eliminato dalla libreria condivisa.`, "success");
+
+    const indexPart = Number(result.removedFromIndex || 0) > 0 ? "Indice aggiornato." : "Elemento rimosso da questa libreria; l'indice remoto potrebbe essere già stato pulito.";
+    updateGenerateStatus(`${label} eliminato dalla libreria condivisa. ${indexPart} Gli altri dispositivi si aggiorneranno con Aggiorna libreria.`, "success");
   } catch (error) {
-    updateGenerateStatus(error.message || "Eliminazione condivisa non riuscita.", "warn");
+    const message = error.message || "Eliminazione condivisa non riuscita.";
+    updateGenerateStatus(`${message} Prova Aggiorna libreria; se rimane, aggiorniamo la API di cancellazione.`, "warn");
   }
 }
 
