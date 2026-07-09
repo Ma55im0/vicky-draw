@@ -659,3 +659,57 @@ input {
 .asset-delete:active {
   transform: scale(0.94);
 }
+
+
+.upload-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.upload-card {
+  display: grid;
+  gap: 4px;
+  min-height: 74px;
+  padding: 12px 14px;
+  border: 1px dashed rgba(255, 122, 168, 0.45);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.upload-card:hover {
+  border-color: var(--accent);
+  background: rgba(255, 247, 251, 0.95);
+}
+
+.upload-card input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.upload-title {
+  font-weight: 800;
+  color: var(--accent-strong);
+}
+
+.upload-hint {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.asset-card .asset-preview-img {
+  max-width: 74px;
+  max-height: 74px;
+  object-fit: contain;
+}
+
+@media (max-width: 760px) {
+  .upload-grid {
+    grid-template-columns: 1fr;
+  }
+}

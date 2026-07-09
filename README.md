@@ -52,3 +52,9 @@ http://localhost:5173
 ## v6
 - Adds delete controls for remote/imported packs.
 - Text updated for external provider import instead of procedural generation.
+
+
+## v7 manual library mode
+- Removed online/AI generation.
+- Added manual upload of stickers and backgrounds into IndexedDB.
+- Uploaded assets can be deleted instantly from the UI and work offline on the same device.

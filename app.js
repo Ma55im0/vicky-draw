@@ -28,6 +28,9 @@ const assetSearch = document.querySelector("#assetSearch");
 const themeSearch = document.querySelector("#themeSearch");
 const generateThemeButton = document.querySelector("#generateThemeButton");
 const generateStatus = document.querySelector("#generateStatus");
+const uploadStickerInput = document.querySelector("#uploadStickerInput");
+const uploadBackgroundInput = document.querySelector("#uploadBackgroundInput");
+const clearUploadedAssetsButton = document.querySelector("#clearUploadedAssetsButton");
 const stickersTab = document.querySelector("#stickersTab");
 const backgroundsTab = document.querySelector("#backgroundsTab");
 const assetGrid = document.querySelector("#assetGrid");
@@ -40,7 +43,9 @@ const galleryGrid = document.querySelector("#galleryGrid");
 const emptyGallery = document.querySelector("#emptyGallery");
 
 const DB_NAME = "vicky-draw";
+const DB_VERSION = 2;
 const STORE_NAME = "drawings";
+const ASSET_STORE_NAME = "custom-assets";
 const AUTOSAVE_ID = "autosave";
 const MAX_HISTORY = 40;
 const MIN_ZOOM = 1;
@@ -49,15 +54,9 @@ const STICKER_MIN_SIZE = 24;
 const STICKER_MAX_SIZE = 240;
 const ZOOM_STEP = 0.2;
 const EMOJI_FONT = "Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif";
-const REMOTE_LIBRARY_URL = "https://ma55im0.github.io/vicky-draw-library/library.json";
-const GENERATE_PACK_URL = "https://vicky-draw-api.vercel.app/api/generate-pack";
-const DELETE_PACK_URL = "https://vicky-draw-api.vercel.app/api/delete-pack";
-const REMOTE_LIBRARY_CACHE_KEY = "vicky-draw-remote-library-v1";
-const REMOTE_LIBRARY_ORIGIN = new URL(REMOTE_LIBRARY_URL).origin;
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
-let remoteLibrary = {
-  version: 0,
-  updatedAt: null,
+let uploadedLibrary = {
   stickers: [],
   backgrounds: [],
 };
@@ -992,11 +991,11 @@ function getAssetKeywords(item) {
 }
 
 function getAllStickers() {
-  return [...STICKERS, ...remoteLibrary.stickers];
+  return [...STICKERS, ...uploadedLibrary.stickers];
 }
 
 function getAllBackgrounds() {
-  return [...BACKGROUNDS, ...remoteLibrary.backgrounds];
+  return [...BACKGROUNDS, ...uploadedLibrary.backgrounds];
 }
 
 function updateLibraryStatus(message) {
@@ -1017,298 +1016,133 @@ function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function makeRemoteAssetUrl(src) {
-  if (!src || typeof src !== "string") {
-    return null;
-  }
 
-  if (src.startsWith("data:image/")) {
-    return src;
-  }
-
-  try {
-    const url = new URL(src, REMOTE_LIBRARY_URL);
-    if (url.protocol !== "https:" || url.origin !== REMOTE_LIBRARY_ORIGIN) {
-      return null;
-    }
-    return url.href;
-  } catch {
-    return null;
-  }
-}
-
-function blobToDataUrl(blob) {
+function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
     reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
+    reader.readAsDataURL(file);
   });
 }
 
-async function fetchAsDataUrl(url) {
-  if (!url || url.startsWith("data:image/")) {
-    return url;
-  }
-
-  const response = await fetch(url, { cache: "no-cache" });
-  if (!response.ok) {
-    throw new Error(`Asset non disponibile: ${response.status}`);
-  }
-  return blobToDataUrl(await response.blob());
+function titleFromFilename(filename) {
+  return String(filename || "Elemento")
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 42) || "Elemento";
 }
 
-async function normalizeRemoteAsset(asset, kind) {
-  if (!asset || typeof asset !== "object") {
-    return null;
-  }
-
-  const id = String(asset.id || asset.name || asset.title || "").trim();
-  const name = String(asset.name || asset.title || id || "Elemento").trim();
-  if (!id || !name) {
-    return null;
-  }
-
-  const src = makeRemoteAssetUrl(asset.src);
-  const normalized = {
-    id: `remote:${id}`,
-    remoteId: id,
-    name,
-    title: name,
-    category: String(asset.category || "extra"),
-    keywords: getAssetKeywords(asset),
-    tags: Array.isArray(asset.tags) ? asset.tags.map(String) : [],
-    isRemote: true,
-    source: "library",
-    pack: typeof asset.pack === "string" ? asset.pack : "",
-    generated: Boolean(asset.generated),
-    generatedFor: typeof asset.generatedFor === "string" ? asset.generatedFor : "",
-    safeTheme: typeof asset.safeTheme === "string" ? asset.safeTheme : "",
-  };
-
-  if (kind === "stickers") {
-    if (!src) {
-      return null;
-    }
-    normalized.type = "image";
-    normalized.src = src;
-    normalized.dataUrl = await fetchAsDataUrl(src).catch(() => null);
-    return normalized;
-  }
-
-  if (kind === "backgrounds") {
-    if (src) {
-      normalized.type = "image";
-      normalized.src = src;
-      normalized.dataUrl = await fetchAsDataUrl(src).catch(() => null);
-      return normalized;
-    }
-
-    if (typeof asset.css === "string" && asset.css.length <= 260) {
-      normalized.type = "css";
-      normalized.css = asset.css;
-      return normalized;
-    }
-  }
-
-  return null;
+function keywordsFromFilename(filename) {
+  return titleFromFilename(filename).toLowerCase();
 }
 
-async function normalizeRemoteLibrary(rawLibrary) {
-  const rawStickers = Array.isArray(rawLibrary?.stickers) ? rawLibrary.stickers : [];
-  const rawBackgrounds = Array.isArray(rawLibrary?.backgrounds) ? rawLibrary.backgrounds : [];
-  const stickers = [];
-  const backgrounds = [];
-
-  for (const sticker of rawStickers.slice(0, 120)) {
-    const normalized = await normalizeRemoteAsset(sticker, "stickers");
-    if (normalized) {
-      stickers.push(normalized);
-    }
-  }
-
-  for (const background of rawBackgrounds.slice(0, 80)) {
-    const normalized = await normalizeRemoteAsset(background, "backgrounds");
-    if (normalized) {
-      backgrounds.push(normalized);
-    }
-  }
-
-  return {
-    version: Number(rawLibrary?.version) || 0,
-    updatedAt: String(rawLibrary?.updatedAt || ""),
-    stickers,
-    backgrounds,
-  };
-}
-
-function saveRemoteLibraryCache(library) {
+async function loadUploadedAssets() {
   try {
-    localStorage.setItem(REMOTE_LIBRARY_CACHE_KEY, JSON.stringify(library));
-  } catch {
-    // Se lo spazio locale è pieno, la libreria resta comunque disponibile online.
-  }
-}
-
-function readRemoteLibraryCache() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(REMOTE_LIBRARY_CACHE_KEY) || "null");
-    if (cached && Array.isArray(cached.stickers) && Array.isArray(cached.backgrounds)) {
-      return cached;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-async function loadRemoteLibrary(options = {}) {
-  const { force = false } = options;
-  const cached = readRemoteLibraryCache();
-
-  if (cached && !force) {
-    remoteLibrary = cached;
-    updateLibraryStatus(`Libreria extra pronta: ${cached.stickers.length} sticker, ${cached.backgrounds.length} sfondi.`);
-    renderAssetGrid();
-  }
-
-  try {
-    updateLibraryStatus(force ? "Aggiorno la libreria extra…" : "Controllo nuovi sticker e sfondi…");
-    const response = await fetch(`${REMOTE_LIBRARY_URL}?t=${Date.now()}`, { cache: "no-cache" });
-    if (!response.ok) {
-      throw new Error(`Libreria non disponibile: ${response.status}`);
-    }
-    const rawLibrary = await response.json();
-    remoteLibrary = await normalizeRemoteLibrary(rawLibrary);
-    saveRemoteLibraryCache(remoteLibrary);
-    updateLibraryStatus(`Libreria extra aggiornata: ${remoteLibrary.stickers.length} sticker, ${remoteLibrary.backgrounds.length} sfondi.`);
+    const records = await getAllUploadedAssets();
+    uploadedLibrary = {
+      stickers: records.filter((item) => item.kind === "sticker"),
+      backgrounds: records.filter((item) => item.kind === "background"),
+    };
+    updateLibraryStatus(`Caricati: ${uploadedLibrary.stickers.length} sticker, ${uploadedLibrary.backgrounds.length} sfondi.`);
     renderAssetGrid();
   } catch {
-    if (cached) {
-      remoteLibrary = cached;
-      updateLibraryStatus(`Offline: uso la libreria salvata (${cached.stickers.length} sticker, ${cached.backgrounds.length} sfondi).`);
-      renderAssetGrid();
-    } else {
-      updateLibraryStatus("Libreria extra non ancora disponibile. Gli elementi base funzionano comunque.");
-    }
+    uploadedLibrary = { stickers: [], backgrounds: [] };
+    updateLibraryStatus("Non riesco a leggere i caricamenti locali. Gli elementi base funzionano comunque.");
   }
 }
 
-async function refreshLibraryUntilPackVisible(packId, attempts = 5) {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    await loadRemoteLibrary({ force: true });
-    const found = remoteLibrary.stickers.some((item) => item.pack === packId) || remoteLibrary.backgrounds.some((item) => item.pack === packId);
-    if (found) {
-      return true;
-    }
-    if (attempt < attempts - 1) {
-      await wait(2500);
-    }
-  }
-  return false;
+async function loadRemoteLibrary() {
+  localStorage.removeItem("vicky-draw-remote-library-v1");
+  await loadUploadedAssets();
 }
 
-
-async function deleteRemotePack(packId, label = "questo pack") {
-  if (!packId) {
+async function handleAssetUpload(files, kind) {
+  const list = Array.from(files || []);
+  if (!list.length) {
     return;
   }
 
-  const confirmed = window.confirm(`Vuoi eliminare ${label} dalla libreria?`);
+  let imported = 0;
+  let skipped = 0;
+
+  for (const file of list) {
+    if (!file.type.startsWith("image/")) {
+      skipped += 1;
+      continue;
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      skipped += 1;
+      continue;
+    }
+
+    const dataUrl = await fileToDataUrl(file);
+    const name = titleFromFilename(file.name);
+    const id = `manual-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const record = {
+      id,
+      kind,
+      type: "image",
+      name,
+      title: name,
+      category: "manual",
+      keywords: keywordsFromFilename(file.name),
+      tags: keywordsFromFilename(file.name).split(/\s+/).filter(Boolean),
+      dataUrl,
+      isUploaded: true,
+      source: "manual",
+      createdAt: new Date().toISOString(),
+    };
+
+    await putUploadedAsset(record);
+    imported += 1;
+  }
+
+  await loadUploadedAssets();
+  setAssetKind(kind === "sticker" ? "stickers" : "backgrounds");
+  updateGenerateStatus(
+    skipped
+      ? `Caricati ${imported} elementi. ${skipped} file saltati perché non validi o troppo grandi.`
+      : `Caricati ${imported} elementi nella libreria locale.`,
+    imported ? "success" : "warn",
+  );
+  setStatus(imported ? "Libreria manuale aggiornata" : "Nessun file caricato");
+}
+
+async function deleteUploadedAsset(assetId, label = "questo elemento") {
+  const confirmed = window.confirm(`Vuoi eliminare ${label} dalla libreria locale?`);
   if (!confirmed) {
     return;
   }
 
-  updateGenerateStatus(`Elimino ${label}…`, "loading");
-
-  try {
-    const response = await fetch(DELETE_PACK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ packId }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.ok === false) {
-      const reason = data.reason || data.message || data.error || "Non sono riuscita a eliminare il pack.";
-      updateGenerateStatus(reason, "error");
-      window.alert(reason);
-      return;
-    }
-
-    updateGenerateStatus(`${label} eliminato. Aggiorno la libreria…`, "success");
-    assetSearch.value = "";
-    await loadRemoteLibrary({ force: true });
-    renderAssetGrid();
-    setStatus(`${label} eliminato`);
-  } catch (error) {
-    updateGenerateStatus("Errore durante l'eliminazione del pack. Riprova tra poco.", "error");
-    window.alert(error?.message || "Errore durante l'eliminazione del pack.");
+  await deleteUploadedAssetRecord(assetId);
+  if (currentBackgroundId === assetId) {
+    applyBackground("white", { pushToHistory: true, autosave: true });
   }
+  await loadUploadedAssets();
+  updateGenerateStatus(`${label} eliminato dalla libreria locale.`, "success");
 }
 
-async function generateThemePack() {
-  const theme = themeSearch?.value?.trim() || "";
-
-  if (!theme) {
-    updateGenerateStatus("Scrivi prima un tema, per esempio unicorno, spazio o vampiro.", "warn");
-    themeSearch?.focus();
+async function clearUploadedAssets() {
+  const total = uploadedLibrary.stickers.length + uploadedLibrary.backgrounds.length;
+  if (!total) {
+    updateGenerateStatus("Non ci sono elementi caricati da cancellare.", "warn");
+    return;
+  }
+  const confirmed = window.confirm(`Vuoi cancellare tutti i ${total} elementi caricati manualmente da questo dispositivo?`);
+  if (!confirmed) {
     return;
   }
 
-  generateThemeButton.disabled = true;
-  updateGenerateStatus(`Cerco sticker online sicuri per “${theme}”…`, "loading");
-
-  try {
-    const response = await fetch(GENERATE_PACK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ theme }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok || data.ok === false) {
-      const reason = data.reason || data.message || data.error || "Non sono riuscita ad aggiornare la libreria.";
-      updateGenerateStatus(reason, "error");
-      window.alert(reason);
-      return;
-    }
-
-    if (data.status === "exists") {
-      await loadRemoteLibrary({ force: true });
-      assetSearch.value = theme;
-      setAssetKind("stickers");
-      renderAssetGrid();
-      updateGenerateStatus(`Tema già presente: ho filtrato la libreria su “${theme}”.`, "success");
-      setStatus(`Tema ${theme.toLowerCase()} già disponibile`);
-      return;
-    }
-
-    const transformedNote = data.softTransformed
-      ? ` Ho usato una versione più adatta ai bambini: “${data.safeTheme}”.`
-      : "";
-
-    updateGenerateStatus(`Pack importato! Aggiorno la libreria…${transformedNote}`, "loading");
-    const packVisible = data.packId ? await refreshLibraryUntilPackVisible(data.packId, 6) : await loadRemoteLibrary({ force: true }).then(() => true);
-
-    assetSearch.value = theme;
-    setAssetKind("stickers");
-    renderAssetGrid();
-
-    if (packVisible) {
-      updateGenerateStatus(`Tutto pronto! I nuovi sticker per “${theme}” sono disponibili.${transformedNote}`, "success");
-      setStatus(`Nuovi elementi per ${theme.toLowerCase()} disponibili`);
-    } else {
-      updateGenerateStatus(`Pack importato. GitHub Pages potrebbe metterci ancora qualche secondo a mostrare tutto.${transformedNote}`, "warn");
-      setStatus(`Pack ${theme.toLowerCase()} creato`);
-    }
-  } catch (error) {
-    updateGenerateStatus("Errore durante la creazione del pack. Riprova tra poco.", "error");
-    window.alert(error?.message || "Errore durante la creazione del pack.");
-  } finally {
-    generateThemeButton.disabled = false;
+  await clearUploadedAssetRecords();
+  if (getBackground(currentBackgroundId)?.isUploaded) {
+    applyBackground("white", { pushToHistory: true, autosave: true });
   }
+  await loadUploadedAssets();
+  updateGenerateStatus("Libreria manuale svuotata.", "success");
 }
 
 function getBackground(id) {
@@ -1882,26 +1716,24 @@ function renderAssetGrid() {
       name.textContent = getAssetName(record);
       button.append(name);
 
-      if (record.isRemote) {
+      if (record.isUploaded) {
         const badge = document.createElement("span");
         badge.className = "asset-badge";
-        badge.textContent = "Extra";
+        badge.textContent = "Caricato";
         button.append(badge);
 
-        if (record.pack) {
-          const deleteButton = document.createElement("span");
-          deleteButton.className = "asset-delete";
-          deleteButton.title = "Elimina questo pack dalla libreria";
-          deleteButton.setAttribute("role", "button");
-          deleteButton.setAttribute("aria-label", `Elimina ${getAssetName(record)}`);
-          deleteButton.textContent = "×";
-          deleteButton.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            deleteRemotePack(record.pack, `il pack ${record.generatedFor || getAssetName(record)}`);
-          });
-          button.append(deleteButton);
-        }
+        const deleteButton = document.createElement("span");
+        deleteButton.className = "asset-delete";
+        deleteButton.title = "Elimina questo elemento";
+        deleteButton.setAttribute("role", "button");
+        deleteButton.setAttribute("aria-label", `Elimina ${getAssetName(record)}`);
+        deleteButton.textContent = "×";
+        deleteButton.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          deleteUploadedAsset(record.id, getAssetName(record));
+        });
+        button.append(deleteButton);
       }
 
       button.addEventListener("click", () => addSticker(record));
@@ -1918,26 +1750,24 @@ function renderAssetGrid() {
       name.textContent = getAssetName(record);
       button.append(preview, name);
 
-      if (record.isRemote) {
+      if (record.isUploaded) {
         const badge = document.createElement("span");
         badge.className = "asset-badge";
-        badge.textContent = "Extra";
+        badge.textContent = "Caricato";
         button.append(badge);
 
-        if (record.pack) {
-          const deleteButton = document.createElement("span");
-          deleteButton.className = "asset-delete";
-          deleteButton.title = "Elimina questo pack dalla libreria";
-          deleteButton.setAttribute("role", "button");
-          deleteButton.setAttribute("aria-label", `Elimina ${getAssetName(record)}`);
-          deleteButton.textContent = "×";
-          deleteButton.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            deleteRemotePack(record.pack, `il pack ${record.generatedFor || getAssetName(record)}`);
-          });
-          button.append(deleteButton);
-        }
+        const deleteButton = document.createElement("span");
+        deleteButton.className = "asset-delete";
+        deleteButton.title = "Elimina questo elemento";
+        deleteButton.setAttribute("role", "button");
+        deleteButton.setAttribute("aria-label", `Elimina ${getAssetName(record)}`);
+        deleteButton.textContent = "×";
+        deleteButton.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          deleteUploadedAsset(record.id, getAssetName(record));
+        });
+        button.append(deleteButton);
       }
 
       button.addEventListener("click", () => {
@@ -1961,10 +1791,16 @@ function setAssetKind(kind) {
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = () => {
-      request.result.createObjectStore(STORE_NAME, { keyPath: "id" });
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(ASSET_STORE_NAME)) {
+        db.createObjectStore(ASSET_STORE_NAME, { keyPath: "id" });
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -1972,12 +1808,12 @@ function openDB() {
   });
 }
 
-async function requestFromStore(mode, callback) {
+async function requestFromStore(mode, callback, storeName = STORE_NAME) {
   const db = await openDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, mode);
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = db.transaction(storeName, mode);
+    const store = transaction.objectStore(storeName);
     const request = callback(store);
 
     request.onsuccess = () => resolve(request.result);
@@ -1990,12 +1826,12 @@ async function requestFromStore(mode, callback) {
   });
 }
 
-async function commitToStore(callback) {
+async function commitToStore(callback, storeName = STORE_NAME) {
   const db = await openDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, "readwrite");
-    const store = transaction.objectStore(STORE_NAME);
+    const transaction = db.transaction(storeName, "readwrite");
+    const store = transaction.objectStore(storeName);
 
     callback(store);
 
@@ -2024,6 +1860,22 @@ async function getAllDrawings() {
 
 async function deleteDrawing(id) {
   await commitToStore((store) => store.delete(id));
+}
+
+async function putUploadedAsset(record) {
+  await commitToStore((store) => store.put(record), ASSET_STORE_NAME);
+}
+
+async function getAllUploadedAssets() {
+  return requestFromStore("readonly", (store) => store.getAll(), ASSET_STORE_NAME);
+}
+
+async function deleteUploadedAssetRecord(id) {
+  await commitToStore((store) => store.delete(id), ASSET_STORE_NAME);
+}
+
+async function clearUploadedAssetRecords() {
+  await commitToStore((store) => store.clear(), ASSET_STORE_NAME);
 }
 
 function scheduleAutosave() {
@@ -2219,22 +2071,24 @@ assetsButton.addEventListener("click", () => {
   assetSearch.value = "";
   setAssetKind("stickers");
   assetsDialog.showModal();
-  window.setTimeout(() => themeSearch?.focus(), 80);
+  window.setTimeout(() => assetSearch.focus(), 80);
 });
 
 stickersTab.addEventListener("click", () => setAssetKind("stickers"));
 backgroundsTab.addEventListener("click", () => setAssetKind("backgrounds"));
 assetSearch.addEventListener("input", renderAssetGrid);
-generateThemeButton?.addEventListener("click", generateThemePack);
-themeSearch?.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    generateThemePack();
-  }
+uploadStickerInput?.addEventListener("change", async () => {
+  await handleAssetUpload(uploadStickerInput.files, "sticker");
+  uploadStickerInput.value = "";
 });
+uploadBackgroundInput?.addEventListener("change", async () => {
+  await handleAssetUpload(uploadBackgroundInput.files, "background");
+  uploadBackgroundInput.value = "";
+});
+clearUploadedAssetsButton?.addEventListener("click", clearUploadedAssets);
 refreshLibraryButton?.addEventListener("click", async () => {
   refreshLibraryButton.disabled = true;
-  await loadRemoteLibrary({ force: true });
+  await loadUploadedAssets();
   refreshLibraryButton.disabled = false;
 });
 
@@ -2280,12 +2134,15 @@ window.addEventListener("resize", () => {
   scheduleAutosave();
 });
 
-resizeCanvas();
-applyBackground("white", { pushToHistory: false, autosave: false });
-applyViewTransform();
-renderAssetGrid();
-updateGenerateStatus("Scrivi un tema e importa nuovi sticker da fonti controllate.");
-loadRemoteLibrary();
-loadAutosave();
-updateHistoryButtons();
-registerServiceWorker();
+async function initApp() {
+  resizeCanvas();
+  applyBackground("white", { pushToHistory: false, autosave: false });
+  applyViewTransform();
+  updateGenerateStatus("Carica manualmente sticker e sfondi approvati: restano sul dispositivo e funzionano offline.");
+  await loadUploadedAssets();
+  await loadAutosave();
+  updateHistoryButtons();
+  registerServiceWorker();
+}
+
+initApp();
